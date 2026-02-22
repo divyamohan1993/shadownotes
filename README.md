@@ -36,7 +36,7 @@ ShadowNotes is a completely on-device AI notebook that runs entirely in your bro
 | Component | Technology |
 |-----------|-----------|
 | Framework | React 19 + TypeScript |
-| Build Tool | Vite 6 |
+| Build Tool | Vite 7 |
 | AI SDK | RunAnywhere Web SDK (0.1.0-beta.9) |
 | LLM | LFM2 350M Q4_K_M (Liquid AI) via llama.cpp WASM |
 | STT | Whisper Tiny English via sherpa-onnx WASM |
@@ -53,7 +53,7 @@ ShadowNotes is a completely on-device AI notebook that runs entirely in your bro
 ### Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/shadownotes.git
+git clone https://github.com/divyamohan1993/shadownotes.git
 cd shadownotes
 npm install
 ```
@@ -140,10 +140,22 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: credentialless
 ```
 
+## Testing
+
+```bash
+npm test          # Run all 137 tests
+npm run test:watch  # Watch mode
+```
+
+Test coverage includes:
+- **60 unit tests** — Domain profiles, case number generation, system prompt validation
+- **71 component tests** — SessionInit, ActiveCapture, SessionSummary, App shell
+- **6 integration tests** — Full session lifecycle for all 4 domains, ephemeral data wipe
+
 ## License
 
 MIT
 
 ---
 
-Built for the RunAnywhere Vibe Challenge Hackathon.
+Built for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) Hackathon.

@@ -1,8 +1,32 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
 .vite
+
+# Environment
 *.local
-_starter-reference
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Project reference files (not part of the app)
+_starter-reference/
 about-hackathon.md
 idea.md
 design.md
+screenshot-*.png
+screencapture-*.pdf

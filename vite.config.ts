@@ -32,11 +32,9 @@ function copyWasmPlugin(): Plugin {
       }
 
       const sherpaDir = path.join(onnxWasm, 'sherpa');
-      const sherpaOut = path.join(assetsDir, 'sherpa');
       if (fs.existsSync(sherpaDir)) {
-        fs.mkdirSync(sherpaOut, { recursive: true });
         for (const file of fs.readdirSync(sherpaDir)) {
-          fs.copyFileSync(path.join(sherpaDir, file), path.join(sherpaOut, file));
+          fs.copyFileSync(path.join(sherpaDir, file), path.join(assetsDir, file));
         }
       }
     },

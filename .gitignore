@@ -32,3 +32,4 @@ screenshot-*.png
 !screenshot-selected.png
 screencapture-*.pdf
 .playwright-mcp/
+.vercel

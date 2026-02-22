@@ -3,7 +3,8 @@
     {
       "source": "/docs/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        { "key": "Cross-Origin-Embedder-Policy", "value": "unsafe-none" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "unsafe-none" }
       ]
     },
     {

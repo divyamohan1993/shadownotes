@@ -29,4 +29,6 @@ about-hackathon.md
 idea.md
 design.md
 screenshot-*.png
+!screenshot-selected.png
 screencapture-*.pdf
+.playwright-mcp/

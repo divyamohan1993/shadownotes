@@ -61,6 +61,15 @@ export function App() {
     setSession((prev) => prev ? { ...prev, transcripts: [...prev.transcripts, entry] } : null);
   }, []);
 
+  const updateLastTranscript = useCallback((entry: TranscriptEntry) => {
+    setSession((prev) => {
+      if (!prev || prev.transcripts.length === 0) return prev;
+      const updated = [...prev.transcripts];
+      updated[updated.length - 1] = entry;
+      return { ...prev, transcripts: updated };
+    });
+  }, []);
+
   const addIntelligence = useCallback((items: IntelligenceItem[]) => {
     setSession((prev) => prev ? { ...prev, intelligence: [...prev.intelligence, ...items] } : null);
   }, []);
@@ -124,6 +133,7 @@ export function App() {
         <ActiveCapture
           session={session}
           onAddTranscript={addTranscript}
+          onUpdateLastTranscript={updateLastTranscript}
           onAddIntelligence={addIntelligence}
           onEndSession={endSession}
         />

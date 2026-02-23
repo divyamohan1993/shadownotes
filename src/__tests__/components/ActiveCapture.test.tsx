@@ -71,6 +71,7 @@ function createSession(overrides?: Partial<SessionData>): SessionData {
 
 describe('ActiveCapture', () => {
   const mockAddTranscript = vi.fn();
+  const mockUpdateLastTranscript = vi.fn();
   const mockAddIntelligence = vi.fn();
   const mockEndSession = vi.fn();
 
@@ -94,6 +95,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -106,6 +108,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -118,6 +121,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -130,6 +134,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -149,6 +154,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -168,6 +174,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -180,6 +187,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -193,6 +201,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -205,6 +214,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -217,6 +227,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -229,6 +240,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -241,6 +253,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -253,6 +266,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -271,6 +285,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -291,6 +306,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -312,6 +328,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={session}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -335,6 +352,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={session}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -351,6 +369,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -364,6 +383,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -381,6 +401,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,
@@ -406,6 +427,7 @@ describe('ActiveCapture', () => {
       <ActiveCapture
         session={createSession()}
         onAddTranscript={mockAddTranscript}
+        onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
         onEndSession={mockEndSession}
       />,

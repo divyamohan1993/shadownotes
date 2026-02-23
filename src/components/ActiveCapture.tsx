@@ -8,6 +8,7 @@ import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } fr
 interface Props {
   session: SessionData;
   onAddTranscript: (entry: TranscriptEntry) => void;
+  onUpdateLastTranscript: (entry: TranscriptEntry) => void;
   onAddIntelligence: (items: IntelligenceItem[]) => void;
   onEndSession: () => void;
 }
@@ -32,7 +33,7 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
   return items;
 }
 
-export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onEndSession }: Props) {
+export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onEndSession }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,11 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Track processed result indices to detect refinements vs new segments
+  const lastFinalIndexRef = useRef(-1);
+  const pendingExtractionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastExtractedTextRef = useRef('');
 
   // LLM model loader
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
@@ -81,6 +87,9 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
+      if (pendingExtractionRef.current) {
+        clearTimeout(pendingExtractionRef.current);
+      }
     };
   }, []);
 
@@ -116,29 +125,48 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
         const result = event.results[i];
         if (result.isFinal) {
           const text = result[0].transcript.trim();
-          if (text) {
-            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-            onAddTranscript({ text, timestamp });
+          if (!text) continue;
 
+          const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+          const isRefinement = i === lastFinalIndexRef.current;
+
+          if (isRefinement) {
+            // Same result index fired again — browser refined its transcription.
+            // Update the existing transcript entry instead of appending a duplicate.
+            onUpdateLastTranscript({ text, timestamp });
+          } else {
+            // Genuinely new speech segment
+            onAddTranscript({ text, timestamp });
+            lastFinalIndexRef.current = i;
+          }
+
+          // Debounce extraction: wait for refinements to settle before extracting.
+          // This prevents running extraction on "I prescribed", then "I prescribed him",
+          // then "I prescribed him telmi certain 80 mg" — only extracts the final version.
+          if (pendingExtractionRef.current) {
+            clearTimeout(pendingExtractionRef.current);
+          }
+          lastExtractedTextRef.current = text;
+          pendingExtractionRef.current = setTimeout(() => {
+            pendingExtractionRef.current = null;
+            const finalText = lastExtractedTextRef.current;
             if (llmReadyRef.current) {
-              // LLM ready — try on-device AI extraction, fall back to keywords
-              tryLLMExtraction(text, session.domain).then(items => {
+              tryLLMExtraction(finalText, session.domain).then(items => {
                 if (items.length > 0) {
                   onAddIntelligence(items);
                 } else {
-                  // LLM produced nothing, fall back to keyword extraction
-                  const kwItems = extractIntelligence(text, session.domain.id);
+                  const kwItems = extractIntelligence(finalText, session.domain.id);
                   if (kwItems.length > 0) onAddIntelligence(kwItems);
                 }
               });
             } else {
-              // LLM not ready — use instant keyword extraction
-              const items = extractIntelligence(text, session.domain.id);
+              const items = extractIntelligence(finalText, session.domain.id);
               if (items.length > 0) {
                 onAddIntelligence(items);
               }
             }
-          }
+          }, 600);
+
           setLiveTranscript('');
         } else {
           interim += result[0].transcript;
@@ -170,11 +198,17 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onAddIntelligence, tryLLMExtraction]);
+  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction]);
 
   const stopCapture = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    if (pendingExtractionRef.current) {
+      clearTimeout(pendingExtractionRef.current);
+      pendingExtractionRef.current = null;
+    }
+    lastFinalIndexRef.current = -1;
+    lastExtractedTextRef.current = '';
     setCaptureState('idle');
     setLiveTranscript('');
   }, []);

@@ -7,7 +7,7 @@
 | **Node.js** | Version 18 or higher ([download](https://nodejs.org)) |
 | **Browser** | Chrome 96+ or Edge 96+ (required for WebAssembly SIMD + SharedArrayBuffer) |
 | **Microphone** | Any working microphone for voice capture |
-| **Disk Space** | ~360MB for AI model download (one-time, cached) |
+| **Disk Space** | ~250MB for LLM model download (one-time, cached) |
 | **RAM** | 2GB+ free (for WASM model inference) |
 
 The app runs identically on **Windows**, **macOS**, and **Linux**. No platform-specific setup required.
@@ -74,35 +74,29 @@ You'll see four domain cards. Select the one that matches your use case:
 | **Medical Notes** | Clinical dictation, patient encounters | Symptoms, Diagnoses, Medications, Vital Signs, Follow-up Actions |
 | **Incident Report** | Accident reports, security incidents | Incident Timeline, Witnesses, Damage Assessment, Root Cause, Next Steps |
 
-### Step 3: Download AI Models
+### Step 3: Begin Session
 
-Click **"DOWNLOAD SECURE MODULES & BEGIN"**. Three models download sequentially:
+Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (LFM2 350M, ~250MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
 
-1. **VAD Module** (Silero VAD v5) — ~5MB — Voice activity detection
-2. **STT Module** (Whisper Tiny English) — ~105MB — Speech-to-text
-3. **LLM Module** (LFM2 350M) — ~250MB — Intelligence extraction
-
-A progress bar shows download status. Models are cached in your browser's private filesystem (OPFS), so subsequent sessions skip this step.
-
-If models are already cached, the button reads **"BEGIN CAPTURE SESSION"** instead.
+A progress bar shows download status. The model is cached in your browser's private filesystem (OPFS), so subsequent sessions skip the download.
 
 ### Step 4: Active Capture
 
 After models load, you enter the capture screen:
 
-- **Header**: Shows clearance level, case number (SN-YYMMDD-XXXX), session timer, and "AIR-GAPPED" status indicator
+- **Header**: Shows clearance level, case number (SN-YYMMDD-XXXX), session timer, and AI status indicator (PENDING/LOADING/ACTIVE/KEYWORDS)
 - **Domain Banner**: Shows the operation codename (e.g., "OPERATION FIREWALL")
 - **Left Panel (RAW TRANSCRIPT)**: Shows all transcribed speech segments with timestamps
 - **Right Panel (INTELLIGENCE EXTRACT)**: Shows AI-extracted findings grouped by category
 
 #### Recording
 
-1. Click **"BEGIN CAPTURE"** to activate your microphone
-2. Speak naturally — VAD automatically detects when you start and stop speaking
-3. The 12-bar audio visualizer shows real-time audio levels
-4. When you stop speaking, the segment is automatically:
-   - Transcribed by Whisper (status: "Transcribing speech...")
-   - Analyzed by the LLM (status: "Extracting intelligence...")
+1. Click **"BEGIN CAPTURE"** to activate your microphone via the Web Speech API
+2. Speak naturally — the browser detects speech automatically
+3. The 12-bar audio visualizer shows capture state
+4. When you finish a phrase, the segment is automatically:
+   - Transcribed by the browser's speech engine (real-time)
+   - Analyzed by the on-device LLM or keyword extraction for intelligence
 5. Results appear in both panels immediately
 6. Click **"PAUSE CAPTURE"** to temporarily stop recording
 
@@ -176,7 +170,7 @@ Return to the session init screen and re-download models. This can happen if OPF
 
 ### Models fail to download
 - Check internet connection (only needed for first download)
-- Ensure sufficient disk space (~360MB)
+- Ensure sufficient disk space (~250MB)
 - Try clearing browser site data and re-downloading
 
 ### Slow transcription or extraction
@@ -189,13 +183,14 @@ Return to the session init screen and re-download models. This can happen if OPF
 ## Running Tests
 
 ```bash
-npm test              # Run all 137 tests
+npx vitest run        # Run all 162 tests
 npm run test:watch    # Watch mode (re-runs on file changes)
 npm run test:coverage # Generate coverage report
 ```
 
 Test suite includes:
 - 60 unit tests (domain profiles, case number generation)
+- 20 extraction tests (keyword-based intelligence extraction)
 - 11 hook tests (model loader state machine)
-- 53 component tests (all UI components)
+- 65 component tests (all UI components)
 - 6 integration tests (full session lifecycle)

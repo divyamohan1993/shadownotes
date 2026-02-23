@@ -43,8 +43,13 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // Track processed result indices to detect refinements vs new segments
-  const lastFinalIndexRef = useRef(-1);
+  // Track last committed transcript text for text-based deduplication.
+  // The Web Speech API (especially on mobile) finalizes partial utterances on
+  // auto-restart, producing "I prescribed" → "I prescribed him" → etc. as
+  // separate isFinal results.  We detect these by checking if the new text is
+  // a superset of (or identical to) the previous final, and update-in-place.
+  const lastFinalTextRef = useRef('');
+  const lastFinalTimeRef = useRef(0);
   const pendingExtractionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastExtractedTextRef = useRef('');
 
@@ -127,26 +132,35 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           const text = result[0].transcript.trim();
           if (!text) continue;
 
+          const now = Date.now();
           const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-          const isRefinement = i === lastFinalIndexRef.current;
+          const prev = lastFinalTextRef.current;
+          const elapsed = now - lastFinalTimeRef.current;
+
+          // Detect progressive refinements: the new text starts with the
+          // previous final (or vice-versa) and arrived within 3 seconds.
+          // On mobile Chrome the recognition auto-restarts on silence,
+          // finalizing partial utterances each time.
+          const isRefinement = prev && elapsed < 3000 && (
+            text.startsWith(prev) || prev.startsWith(text)
+          );
 
           if (isRefinement) {
-            // Same result index fired again — browser refined its transcription.
-            // Update the existing transcript entry instead of appending a duplicate.
-            onUpdateLastTranscript({ text, timestamp });
+            // Take the longer version and update the last entry in place
+            const longer = text.length >= prev.length ? text : prev;
+            onUpdateLastTranscript({ text: longer, timestamp });
+            lastFinalTextRef.current = longer;
           } else {
-            // Genuinely new speech segment
             onAddTranscript({ text, timestamp });
-            lastFinalIndexRef.current = i;
+            lastFinalTextRef.current = text;
           }
+          lastFinalTimeRef.current = now;
 
           // Debounce extraction: wait for refinements to settle before extracting.
-          // This prevents running extraction on "I prescribed", then "I prescribed him",
-          // then "I prescribed him telmi certain 80 mg" — only extracts the final version.
           if (pendingExtractionRef.current) {
             clearTimeout(pendingExtractionRef.current);
           }
-          lastExtractedTextRef.current = text;
+          lastExtractedTextRef.current = lastFinalTextRef.current;
           pendingExtractionRef.current = setTimeout(() => {
             pendingExtractionRef.current = null;
             const finalText = lastExtractedTextRef.current;
@@ -165,7 +179,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
                 onAddIntelligence(items);
               }
             }
-          }, 600);
+          }, 800);
 
           setLiveTranscript('');
         } else {
@@ -207,7 +221,8 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
       clearTimeout(pendingExtractionRef.current);
       pendingExtractionRef.current = null;
     }
-    lastFinalIndexRef.current = -1;
+    lastFinalTextRef.current = '';
+    lastFinalTimeRef.current = 0;
     lastExtractedTextRef.current = '';
     setCaptureState('idle');
     setLiveTranscript('');

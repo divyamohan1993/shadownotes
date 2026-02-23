@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initSDK } from './runanywhere';
+import { initSDK, ModelManager, ModelCategory } from './runanywhere';
+import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
 import { SessionSummary } from './components/SessionSummary';
@@ -12,8 +13,9 @@ export function App() {
   const [screen, setScreen] = useState<AppScreen>('init');
   const [session, setSession] = useState<SessionData | null>(null);
   const [bootPhase, setBootPhase] = useState(0);
+  const [modelProgress, setModelProgress] = useState(-1); // -1 = not started, 0-1 = downloading
 
-  // Boot sequence with real SDK init
+  // Boot sequence with real SDK init + model preload
   useEffect(() => {
     const bootSequence = async () => {
       setBootPhase(1);
@@ -25,6 +27,25 @@ export function App() {
       try {
         await initSDK();
         setBootPhase(4);
+
+        // Immediately begin downloading the LLM model in the background
+        const models = ModelManager.getModels().filter((m) => m.modality === ModelCategory.Language);
+        if (models.length > 0) {
+          const model = models[0];
+          if (model.status !== 'downloaded' && model.status !== 'loaded') {
+            setBootPhase(5);
+            setModelProgress(0);
+            const unsub = EventBus.shared.on('model.downloadProgress', (evt) => {
+              if (evt.modelId === model.id) {
+                setModelProgress(evt.progress ?? 0);
+              }
+            });
+            await ModelManager.downloadModel(model.id);
+            unsub();
+            setModelProgress(1);
+          }
+        }
+
         await new Promise((r) => setTimeout(r, 200));
         setSdkReady(true);
       } catch (err) {
@@ -111,6 +132,15 @@ export function App() {
               <div className={`boot-line ${bootPhase >= 4 ? 'done' : 'active'}`}>
                 <span className="boot-prefix">[AI]</span> Loading on-device inference engine...
                 {bootPhase >= 4 ? <span className="boot-check">{'\u2713'}</span> : <span className="boot-spinner" />}
+              </div>
+            )}
+            {bootPhase >= 5 && (
+              <div className={`boot-line ${modelProgress >= 1 ? 'done' : 'active'}`}>
+                <span className="boot-prefix">[DL]</span>
+                {modelProgress >= 1
+                  ? <>Downloading AI model... <span className="boot-check">{'\u2713'}</span></>
+                  : <>Downloading AI model... {Math.round(modelProgress * 100)}%</>
+                }
               </div>
             )}
             {sdkError && (

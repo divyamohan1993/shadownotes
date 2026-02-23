@@ -4,6 +4,14 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 // Mock SDK init
 vi.mock('../../runanywhere', () => ({
   initSDK: vi.fn(async () => {}),
+  ModelManager: {
+    getModels: vi.fn(() => []),
+  },
+  ModelCategory: { Language: 'language' },
+}));
+
+vi.mock('@runanywhere/web', () => ({
+  EventBus: { shared: { on: vi.fn(() => () => {}) } },
 }));
 
 // Mock child components to isolate App logic

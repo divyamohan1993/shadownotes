@@ -22,9 +22,9 @@ ShadowNotes is a completely on-device AI notebook that runs entirely in your bro
 
 ## Features
 
-- **Voice Activity Detection (VAD)** — Silero VAD v5 detects when you start and stop speaking
-- **Real-time Speech-to-Text** — Whisper Tiny English transcribes your speech on-device
-- **AI Intelligence Extraction** — LFM2 350M LLM analyzes transcripts and extracts structured findings
+- **Real-time Speech-to-Text** — Browser-native Web Speech API for fast, lightweight transcription on any device
+- **On-Device AI Extraction** — RunAnywhere LFM2 350M LLM analyzes transcripts and extracts structured findings via llama.cpp WASM
+- **Keyword Fallback** — Instant regex-based extraction while LLM loads, ensuring intelligence from the first word
 - **4 Domain Profiles** — Security Audit, Legal Deposition, Medical Notes, Incident Report — each with tailored extraction categories
 - **Ephemeral Storage** — All data lives in browser memory only. No localStorage, no IndexedDB, no cookies
 - **Session Dossier** — Complete summary view with all transcripts and extracted intelligence
@@ -39,8 +39,8 @@ ShadowNotes is a completely on-device AI notebook that runs entirely in your bro
 | Build Tool | Vite 7 |
 | AI SDK | RunAnywhere Web SDK (0.1.0-beta.9) |
 | LLM | LFM2 350M Q4_K_M (Liquid AI) via llama.cpp WASM |
-| STT | Whisper Tiny English via sherpa-onnx WASM |
-| VAD | Silero VAD v5 via sherpa-onnx WASM |
+| STT | Web Speech API (browser-native) |
+| Fallback | Keyword-based regex extraction engine |
 | Styling | Custom CSS with JetBrains Mono + Special Elite fonts |
 
 ## Getting Started
@@ -78,14 +78,15 @@ npm run preview
 ### Data Flow
 
 ```
-Microphone -> VAD (speech detection) -> STT (transcription) -> LLM (intelligence extraction)
+Microphone -> Web Speech API (transcription) -> RunAnywhere LLM (intelligence extraction)
+                                              -> Keyword fallback (instant, if LLM loading)
 ```
 
-1. **Session Init** — Select a domain profile (Security, Legal, Medical, Incident)
-2. **Model Download** — Three AI models download directly to your browser (~360MB total, cached in OPFS)
-3. **Voice Capture** — Click "BEGIN CAPTURE" to start recording. VAD automatically detects speech segments
-4. **Transcription** — Each speech segment is transcribed on-device by Whisper
-5. **Intelligence Extraction** — The LLM analyzes the full transcript and extracts structured findings based on the selected domain
+1. **Boot** — RunAnywhere SDK initializes and registers the LLM model
+2. **Session Init** — Select a domain profile (Security, Legal, Medical, Incident). LLM begins downloading in background
+3. **Voice Capture** — Click "BEGIN CAPTURE" to start recording via the browser's Web Speech API
+4. **Transcription** — Speech is transcribed in real-time by the browser's native speech engine
+5. **Intelligence Extraction** — If LLM is ready, the on-device AI extracts structured findings. Otherwise, keyword-based regex extraction provides instant results
 6. **Session Dossier** — Click "END SESSION" for a complete summary view
 7. **Destroy** — Click "DESTROY SESSION" to permanently wipe all data from memory
 
@@ -102,23 +103,25 @@ Microphone -> VAD (speech detection) -> STT (transcription) -> LLM (intelligence
 
 ```
 src/
-  App.tsx                    # App shell, screen routing, session state
-  runanywhere.ts             # SDK initialization, model catalog
+  App.tsx                    # App shell, boot sequence, screen routing, session state
+  runanywhere.ts             # RunAnywhere SDK init, LLM model registration
+  extraction.ts              # Keyword-based intelligence extraction (regex fallback)
   types.ts                   # TypeScript interfaces
   domains.ts                 # Domain profiles with system prompts
+  speech.d.ts                # Web Speech API type declarations
   hooks/
-    useModelLoader.ts        # Model download + loading hook
+    useModelLoader.ts        # Model download + loading lifecycle hook
   components/
-    SessionInit.tsx          # Domain selection + model loading
-    ActiveCapture.tsx        # VAD + STT + LLM capture pipeline
+    SessionInit.tsx          # Domain selection + LLM preload progress
+    ActiveCapture.tsx        # Web Speech API + LLM/keyword extraction pipeline
     SessionSummary.tsx       # Dossier view + destroy animation
   styles/
-    index.css                # Classified Dossier theme (1900+ lines)
+    index.css                # Classified Dossier theme
 ```
 
 ## Privacy & Security
 
-- **No server communication** — After model download, the app makes zero network requests
+- **On-device AI** — Intelligence extraction runs locally via RunAnywhere LLM (llama.cpp WASM)
 - **No data persistence** — All data is held in React state (JavaScript heap memory)
 - **No cookies, localStorage, or IndexedDB** used for session data
 - **Tab close = total wipe** — Closing the browser tab permanently destroys all data
@@ -143,13 +146,15 @@ Cross-Origin-Embedder-Policy: credentialless
 ## Testing
 
 ```bash
-npm test          # Run all 137 tests
+npx vitest run      # Run all 162 tests
 npm run test:watch  # Watch mode
 ```
 
 Test coverage includes:
 - **60 unit tests** — Domain profiles, case number generation, system prompt validation
-- **71 component tests** — SessionInit, ActiveCapture, SessionSummary, App shell
+- **20 extraction tests** — Keyword-based intelligence extraction across all 4 domains
+- **11 hook tests** — useModelLoader state transitions, error handling
+- **65 component tests** — SessionInit, ActiveCapture, SessionSummary, App shell
 - **6 integration tests** — Full session lifecycle for all 4 domains, ephemeral data wipe
 
 ## License

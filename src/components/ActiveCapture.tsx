@@ -15,7 +15,6 @@ type CaptureState = 'idle' | 'listening' | 'processing-stt' | 'processing-llm';
 
 export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onEndSession }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
-  const [audioLevel, setAudioLevel] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [processingText, setProcessingText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +23,49 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
   const micRef = useRef<AudioCapture | null>(null);
   const vadUnsub = useRef<(() => void) | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+
+  // Audio level stored in ref — never triggers re-render
+  const audioLevelRef = useRef(0);
+  const barsRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
+
+  // Throttle VAD: skip chunks if main thread is overloaded
+  const vadBusyRef = useRef(false);
+
+  // Animate VAD bars via rAF — ~15fps cap to stay gentle on slow CPUs
+  const lastBarUpdate = useRef(0);
+  useEffect(() => {
+    let running = true;
+    const animate = (now: number) => {
+      if (!running) return;
+      // Cap bar updates to ~15fps (66ms)
+      if (now - lastBarUpdate.current > 66) {
+        lastBarUpdate.current = now;
+        const container = barsRef.current;
+        if (container) {
+          const level = audioLevelRef.current;
+          const bars = container.children;
+          for (let i = 0; i < bars.length; i++) {
+            const bar = bars[i] as HTMLElement;
+            if (captureState === 'listening') {
+              // Use sin-based pseudo-random so it's deterministic per-bar + time
+              const phase = (now * 0.003) + (i * 0.8);
+              const wave = 0.5 + 0.5 * Math.sin(phase);
+              bar.style.height = `${Math.max(4, level * 40 * (0.4 + wave * 0.6))}px`;
+            } else {
+              bar.style.height = '4px';
+            }
+          }
+        }
+      }
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => {
+      running = false;
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [captureState]);
 
   // Session timer
   useEffect(() => {
@@ -47,6 +89,7 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     return () => {
       micRef.current?.stop();
       vadUnsub.current?.();
+      cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
@@ -55,7 +98,6 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     setProcessingText('Transcribing speech...');
 
     try {
-      // Import STT dynamically since it's from onnx package
       const { STT } = await import('@runanywhere/web-onnx');
 
       const sttResult = await STT.transcribe(audioData);
@@ -76,7 +118,9 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
       setCaptureState('processing-llm');
       setProcessingText('Extracting intelligence...');
 
-      const fullTranscript = [...session.transcripts, entry].map((t) => t.text).join(' ');
+      // Cap transcript context to last 10 segments to limit LLM input size
+      const recentTranscripts = [...session.transcripts, entry].slice(-10);
+      const fullTranscript = recentTranscripts.map((t) => t.text).join(' ');
 
       const { result: resultPromise } = await TextGeneration.generateStream(
         `Transcript:\n"${fullTranscript}"\n\nExtract intelligence:`,
@@ -109,7 +153,9 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
         onAddIntelligence(items);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      // Show error but don't break capture — allow retrying on next speech segment
+      setError(msg);
     }
 
     setCaptureState('listening');
@@ -144,8 +190,20 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     });
 
     await mic.start(
-      (chunk) => { VAD.processSamples(chunk); },
-      (level) => { setAudioLevel(level); },
+      (chunk) => {
+        // Throttle: skip VAD processing if a previous chunk is still being processed
+        if (vadBusyRef.current) return;
+        vadBusyRef.current = true;
+        try {
+          VAD.processSamples(chunk);
+        } finally {
+          vadBusyRef.current = false;
+        }
+      },
+      (level) => {
+        // Store in ref — no React re-render, bar animation reads from ref via rAF
+        audioLevelRef.current = level;
+      },
     );
   }, [processSegment]);
 
@@ -153,7 +211,7 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     micRef.current?.stop();
     vadUnsub.current?.();
     setCaptureState('idle');
-    setAudioLevel(0);
+    audioLevelRef.current = 0;
   }, []);
 
   const handleEndSession = useCallback(() => {
@@ -234,16 +292,12 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
           {/* VAD / Mic controls */}
           <div className="capture-controls">
             <div className="vad-indicator" data-state={captureState}>
-              <div className="vad-bars">
+              <div className="vad-bars" ref={barsRef}>
                 {Array.from({ length: 12 }).map((_, i) => (
                   <div
                     key={i}
                     className="vad-bar"
-                    style={{
-                      height: captureState === 'listening'
-                        ? `${Math.max(4, audioLevel * 40 * (0.5 + Math.random() * 0.5))}px`
-                        : '4px',
-                    }}
+                    style={{ height: '4px' }}
                   />
                 ))}
               </div>

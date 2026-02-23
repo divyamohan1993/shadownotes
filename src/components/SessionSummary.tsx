@@ -1,15 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { SessionData, IntelligenceItem } from '../types';
 
 interface Props {
   session: SessionData;
+  onUpdateIntelligence: (id: string, newContent: string) => void;
+  onDeleteIntelligence: (id: string) => void;
   onDestroy: () => void;
 }
 
-export function SessionSummary({ session, onDestroy }: Props) {
+export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntelligence, onDestroy }: Props) {
   const [destroying, setDestroying] = useState(false);
   const [confirmDestroy, setConfirmDestroy] = useState(false);
   const [burnProgress, setBurnProgress] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const startEdit = useCallback((item: IntelligenceItem) => {
+    setEditingId(item.id);
+    setEditValue(item.content);
+  }, []);
+
+  const saveEdit = useCallback(() => {
+    if (editingId && editValue.trim()) {
+      onUpdateIntelligence(editingId, editValue.trim());
+    }
+    setEditingId(null);
+    setEditValue('');
+  }, [editingId, editValue, onUpdateIntelligence]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditValue('');
+  }, []);
 
   const handleDestroy = () => {
     if (!confirmDestroy) {
@@ -154,11 +176,25 @@ export function SessionSummary({ session, onDestroy }: Props) {
               return (
                 <div key={cat} className="dossier-intel-group">
                   <h3 className="dossier-intel-category">{cat.toUpperCase()}</h3>
-                  {items.map((item, i) => (
-                    <div key={i} className="dossier-intel-item">
+                  {items.map((item) => (
+                    <div key={item.id} className="dossier-intel-item">
                       <span className="dossier-bullet">{'\u{25CF}'}</span>
-                      <span>{item.content}</span>
+                      {editingId === item.id ? (
+                        <input
+                          className="intel-edit-input"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } else if (e.key === 'Escape') cancelEdit(); }}
+                          onBlur={saveEdit}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="intel-content-editable" onClick={() => startEdit(item)} title="Click to edit">
+                          {item.content}
+                        </span>
+                      )}
                       <span className="intel-time-small">[{item.timestamp}]</span>
+                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
                     </div>
                   ))}
                 </div>

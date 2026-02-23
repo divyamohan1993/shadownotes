@@ -10,6 +10,8 @@ interface Props {
   onAddTranscript: (entry: TranscriptEntry) => void;
   onUpdateLastTranscript: (entry: TranscriptEntry) => void;
   onAddIntelligence: (items: IntelligenceItem[]) => void;
+  onUpdateIntelligence: (id: string, newContent: string) => void;
+  onDeleteIntelligence: (id: string) => void;
   onEndSession: () => void;
 }
 
@@ -25,7 +27,7 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
     if (match) {
       const [, category, content] = match;
       if (categorySet.has(category)) {
-        items.push({ category, content: content.trim(), timestamp });
+        items.push({ id: crypto.randomUUID(), category, content: content.trim(), timestamp });
       }
     }
   }
@@ -33,11 +35,13 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
   return items;
 }
 
-export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onEndSession }: Props) {
+export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onUpdateIntelligence, onDeleteIntelligence, onEndSession }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState('00:00:00');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const captureStateRef = useRef<CaptureState>('idle');
@@ -120,6 +124,24 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     } finally {
       llmBusyRef.current = false;
     }
+  }, []);
+
+  const startEdit = useCallback((item: IntelligenceItem) => {
+    setEditingId(item.id);
+    setEditValue(item.content);
+  }, []);
+
+  const saveEdit = useCallback(() => {
+    if (editingId && editValue.trim()) {
+      onUpdateIntelligence(editingId, editValue.trim());
+    }
+    setEditingId(null);
+    setEditValue('');
+  }, [editingId, editValue, onUpdateIntelligence]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null);
+    setEditValue('');
   }, []);
 
   const startCapture = useCallback(() => {
@@ -377,10 +399,24 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
                     <span className="intel-stamp">{cat.toUpperCase()}</span>
                     <span className="intel-category-count">{items.length}</span>
                   </div>
-                  {items.map((item, i) => (
-                    <div key={i} className="intel-item">
+                  {items.map((item) => (
+                    <div key={item.id} className="intel-item">
                       <span className="intel-time">[{item.timestamp}]</span>
-                      <span className="intel-content">{item.content}</span>
+                      {editingId === item.id ? (
+                        <input
+                          className="intel-edit-input"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } else if (e.key === 'Escape') cancelEdit(); }}
+                          onBlur={saveEdit}
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="intel-content intel-content-editable" onClick={() => startEdit(item)} title="Click to edit">
+                          {item.content}
+                        </span>
+                      )}
+                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
                     </div>
                   ))}
                 </div>

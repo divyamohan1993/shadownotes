@@ -92,6 +92,18 @@ describe('extractIntelligence', () => {
       expect(items[0].timestamp).toMatch(/\d{2}:\d{2}:\d{2}/);
     });
 
+    it('assigns unique id to each item', () => {
+      const items = extractIntelligence(
+        'Blood pressure is 140 over 90. Patient reports headache.',
+        'medical',
+      );
+      expect(items.length).toBeGreaterThan(0);
+      for (const item of items) {
+        expect(typeof item.id).toBe('string');
+        expect(item.id.length).toBeGreaterThan(0);
+      }
+    });
+
     it('deduplicates same content in same category', () => {
       const items = extractIntelligence('Pain. Pain.', 'medical');
       expect(items.length).toBe(1);

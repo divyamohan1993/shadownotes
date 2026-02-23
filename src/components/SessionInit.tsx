@@ -88,6 +88,10 @@ export function SessionInit({ onStart }: Props) {
         BEGIN CAPTURE SESSION
       </button>
 
+      <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-field-manual">
+        {'\u{1F4D6}'} FIELD MANUAL
+      </a>
+
       <div className="init-footer">
         <div className="status-dot status-secure" />
         <span>AI EXTRACTION ON-DEVICE</span>

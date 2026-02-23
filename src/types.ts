@@ -11,6 +11,7 @@ export interface DomainProfile {
 }
 
 export interface IntelligenceItem {
+  id: string;
   category: string;
   content: string;
   timestamp: string;

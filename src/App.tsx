@@ -95,6 +95,20 @@ export function App() {
     setSession((prev) => prev ? { ...prev, intelligence: [...prev.intelligence, ...items] } : null);
   }, []);
 
+  const updateIntelligence = useCallback((id: string, newContent: string) => {
+    setSession((prev) => {
+      if (!prev) return null;
+      return { ...prev, intelligence: prev.intelligence.map((item) => item.id === id ? { ...item, content: newContent } : item) };
+    });
+  }, []);
+
+  const deleteIntelligence = useCallback((id: string) => {
+    setSession((prev) => {
+      if (!prev) return null;
+      return { ...prev, intelligence: prev.intelligence.filter((item) => item.id !== id) };
+    });
+  }, []);
+
   const endSession = useCallback(() => {
     setScreen('summary');
   }, []);
@@ -165,11 +179,13 @@ export function App() {
           onAddTranscript={addTranscript}
           onUpdateLastTranscript={updateLastTranscript}
           onAddIntelligence={addIntelligence}
+          onUpdateIntelligence={updateIntelligence}
+          onDeleteIntelligence={deleteIntelligence}
           onEndSession={endSession}
         />
       )}
       {screen === 'summary' && session && (
-        <SessionSummary session={session} onDestroy={destroySession} />
+        <SessionSummary session={session} onUpdateIntelligence={updateIntelligence} onDeleteIntelligence={deleteIntelligence} onDestroy={destroySession} />
       )}
     </div>
   );

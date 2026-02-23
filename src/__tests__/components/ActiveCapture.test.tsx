@@ -73,6 +73,8 @@ describe('ActiveCapture', () => {
   const mockAddTranscript = vi.fn();
   const mockUpdateLastTranscript = vi.fn();
   const mockAddIntelligence = vi.fn();
+  const mockUpdateIntelligence = vi.fn();
+  const mockDeleteIntelligence = vi.fn();
   const mockEndSession = vi.fn();
 
   beforeEach(() => {
@@ -97,6 +99,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -110,6 +114,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -123,6 +129,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -136,6 +144,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -156,6 +166,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -176,6 +188,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -189,6 +203,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -203,6 +219,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -216,6 +234,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -229,6 +249,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -242,6 +264,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -255,6 +279,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -268,6 +294,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -287,6 +315,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -308,6 +338,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -330,6 +362,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -342,9 +376,9 @@ describe('ActiveCapture', () => {
   it('renders intelligence items grouped by category', () => {
     const session = createSession({
       intelligence: [
-        { category: 'Vulnerabilities', content: 'Open port 22 on server', timestamp: '14:30:00' },
-        { category: 'Timeline', content: 'Entry at 02:14 AM', timestamp: '14:30:00' },
-        { category: 'Vulnerabilities', content: 'Weak password policy', timestamp: '14:31:00' },
+        { id: 'test-1', category: 'Vulnerabilities', content: 'Open port 22 on server', timestamp: '14:30:00' },
+        { id: 'test-2', category: 'Timeline', content: 'Entry at 02:14 AM', timestamp: '14:30:00' },
+        { id: 'test-3', category: 'Vulnerabilities', content: 'Weak password policy', timestamp: '14:31:00' },
       ],
     });
 
@@ -354,6 +388,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -371,6 +407,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -385,6 +423,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -403,6 +443,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );
@@ -429,6 +471,8 @@ describe('ActiveCapture', () => {
         onAddTranscript={mockAddTranscript}
         onUpdateLastTranscript={mockUpdateLastTranscript}
         onAddIntelligence={mockAddIntelligence}
+        onUpdateIntelligence={mockUpdateIntelligence}
+        onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
     );

@@ -690,6 +690,33 @@ input:focus, textarea:focus, select:focus {
   filter: grayscale(0.5);
 }
 
+/* Field Manual link */
+.btn-field-manual {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background: transparent;
+  color: var(--accent-amber);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid var(--accent-amber-dim);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-field-manual:hover {
+  background: var(--accent-amber-dim);
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 15px rgba(212, 168, 67, 0.15);
+  text-decoration: none;
+}
+
 /* Init footer */
 .init-footer {
   display: flex;
@@ -1317,6 +1344,64 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.6;
   color: var(--text-primary);
   word-break: break-word;
+}
+
+/* Editable intel items */
+.intel-content-editable {
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-break: break-word;
+  cursor: pointer;
+  border-bottom: 1px dashed transparent;
+  transition: border-color var(--transition-fast);
+}
+
+.intel-content-editable:hover {
+  border-bottom-color: var(--accent-amber-dim);
+}
+
+.intel-edit-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--accent-amber);
+  background: rgba(10, 14, 26, 0.8);
+  border: 1px solid var(--accent-amber);
+  border-radius: 2px;
+  padding: 0.15rem 0.4rem;
+  outline: none;
+  box-shadow: 0 0 8px var(--accent-amber-dim);
+}
+
+.intel-delete-btn {
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+  padding: 0;
+  margin-left: auto;
+}
+
+.intel-item:hover .intel-delete-btn,
+.dossier-intel-item:hover .intel-delete-btn {
+  display: inline-flex;
+}
+
+.intel-delete-btn:hover {
+  color: var(--red-destroy-bright, #e74c3c);
+  border-color: var(--red-destroy, #c0392b);
 }
 
 

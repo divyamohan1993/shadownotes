@@ -206,6 +206,7 @@ export function extractIntelligence(text: string, domainId: DomainId): Intellige
         if (!seen.has(key)) {
           seen.add(key);
           items.push({
+            id: crypto.randomUUID(),
             category: rule.category,
             content: sentence,
             timestamp,

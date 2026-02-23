@@ -8,8 +8,8 @@ import {
 } from '@runanywhere/web';
 
 import { LlamaCPP } from '@runanywhere/web-llamacpp';
-import { ONNX } from '@runanywhere/web-onnx';
 
+// Only register the LLM — STT and VAD are handled by Web Speech API
 const MODELS: CompactModelDef[] = [
   {
     id: 'lfm2-350m-q4_k_m',
@@ -19,24 +19,6 @@ const MODELS: CompactModelDef[] = [
     framework: LLMFramework.LlamaCpp,
     modality: ModelCategory.Language,
     memoryRequirement: 250_000_000,
-  },
-  {
-    id: 'sherpa-onnx-whisper-tiny.en',
-    name: 'Whisper Tiny English (ONNX)',
-    url: 'https://huggingface.co/runanywhere/sherpa-onnx-whisper-tiny.en/resolve/main/sherpa-onnx-whisper-tiny.en.tar.gz',
-    framework: LLMFramework.ONNX,
-    modality: ModelCategory.SpeechRecognition,
-    memoryRequirement: 105_000_000,
-    artifactType: 'archive' as const,
-  },
-  {
-    id: 'silero-vad-v5',
-    name: 'Silero VAD v5',
-    url: 'https://huggingface.co/runanywhere/silero-vad-v5/resolve/main/silero_vad.onnx',
-    files: ['silero_vad.onnx'],
-    framework: LLMFramework.ONNX,
-    modality: ModelCategory.Audio,
-    memoryRequirement: 5_000_000,
   },
 ];
 
@@ -52,7 +34,6 @@ export async function initSDK(): Promise<void> {
     });
 
     await LlamaCPP.register();
-    await ONNX.register();
 
     RunAnywhere.registerModels(MODELS);
   })();

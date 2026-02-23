@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { extractIntelligence } from '../extraction';
-import type { SessionData, TranscriptEntry, IntelligenceItem } from '../types';
+import { useModelLoader } from '../hooks/useModelLoader';
+import { ModelCategory } from '@runanywhere/web';
+import { TextGeneration } from '@runanywhere/web-llamacpp';
+import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
 
 interface Props {
   session: SessionData;
@@ -10,6 +13,24 @@ interface Props {
 }
 
 type CaptureState = 'idle' | 'listening';
+
+function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
+  const items: IntelligenceItem[] = [];
+  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const categorySet = new Set(categories);
+
+  for (const line of response.split('\n')) {
+    const match = line.match(/^\[([^\]]+)\]\s*(.+)/);
+    if (match) {
+      const [, category, content] = match;
+      if (categorySet.has(category)) {
+        items.push({ category, content: content.trim(), timestamp });
+      }
+    }
+  }
+
+  return items;
+}
 
 export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onEndSession }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
@@ -21,10 +42,23 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // Keep ref in sync with state so callbacks can read current value
+  // LLM model loader
+  const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
+  const llmReadyRef = useRef(false);
+
+  // Keep refs in sync with state so callbacks can read current value
   useEffect(() => {
     captureStateRef.current = captureState;
   }, [captureState]);
+
+  useEffect(() => {
+    llmReadyRef.current = llmState === 'ready';
+  }, [llmState]);
+
+  // Continue/complete LLM loading on mount
+  useEffect(() => {
+    ensureLLM();
+  }, [ensureLLM]);
 
   // Session timer
   useEffect(() => {
@@ -48,6 +82,17 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     return () => {
       recognitionRef.current?.abort();
     };
+  }, []);
+
+  // LLM extraction — async, non-blocking
+  const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
+    try {
+      const prompt = `${domain.systemPrompt}\n\nTranscript:\n${text}`;
+      const { text: response } = await TextGeneration.generate(prompt);
+      return parseLLMResponse(response, domain.categories);
+    } catch {
+      return [];
+    }
   }, []);
 
   const startCapture = useCallback(() => {
@@ -75,10 +120,23 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
             const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
             onAddTranscript({ text, timestamp });
 
-            // Run lightweight keyword extraction — instant, zero memory
-            const items = extractIntelligence(text, session.domain.id);
-            if (items.length > 0) {
-              onAddIntelligence(items);
+            if (llmReadyRef.current) {
+              // LLM ready — try on-device AI extraction, fall back to keywords
+              tryLLMExtraction(text, session.domain).then(items => {
+                if (items.length > 0) {
+                  onAddIntelligence(items);
+                } else {
+                  // LLM produced nothing, fall back to keyword extraction
+                  const kwItems = extractIntelligence(text, session.domain.id);
+                  if (kwItems.length > 0) onAddIntelligence(kwItems);
+                }
+              });
+            } else {
+              // LLM not ready — use instant keyword extraction
+              const items = extractIntelligence(text, session.domain.id);
+              if (items.length > 0) {
+                onAddIntelligence(items);
+              }
             }
           }
           setLiveTranscript('');
@@ -112,7 +170,7 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain.id, onAddTranscript, onAddIntelligence]);
+  }, [session.domain, onAddTranscript, onAddIntelligence, tryLLMExtraction]);
 
   const stopCapture = useCallback(() => {
     recognitionRef.current?.stop();
@@ -133,6 +191,17 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
     return acc;
   }, {});
 
+  // LLM status label for header
+  const llmStatusLabel = (() => {
+    switch (llmState) {
+      case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
+      case 'loading': return 'AI: LOADING';
+      case 'ready': return 'AI: ACTIVE';
+      case 'error': return 'AI: KEYWORDS';
+      default: return 'AI: PENDING';
+    }
+  })();
+
   return (
     <div className="capture-screen">
       {/* Header bar */}
@@ -146,8 +215,8 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
         </div>
         <div className="capture-header-right">
           <div className="status-indicator">
-            <div className="status-dot status-secure" />
-            <span>AIR-GAPPED</span>
+            <div className={`status-dot ${llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
+            <span>{llmStatusLabel}</span>
           </div>
           <button className="btn-end" onClick={handleEndSession}>
             END SESSION

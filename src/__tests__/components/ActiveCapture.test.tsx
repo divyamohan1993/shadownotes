@@ -1,6 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
+// Mock useModelLoader
+const mockEnsure = vi.fn(async () => true);
+vi.mock('../../hooks/useModelLoader', () => ({
+  useModelLoader: vi.fn(() => ({
+    state: 'idle',
+    progress: 0,
+    error: null,
+    ensure: mockEnsure,
+  })),
+}));
+
+vi.mock('@runanywhere/web', () => ({
+  ModelCategory: { Language: 'language' },
+}));
+
+vi.mock('@runanywhere/web-llamacpp', () => ({
+  TextGeneration: {
+    generate: vi.fn(async () => ({
+      text: '',
+      tokensUsed: 0,
+      tokensPerSecond: 0,
+      latencyMs: 0,
+    })),
+  },
+}));
+
 // Mock SpeechRecognition API
 const mockStart = vi.fn();
 const mockStop = vi.fn();
@@ -28,6 +54,7 @@ Object.defineProperty(window, 'SpeechRecognition', {
 });
 
 import { ActiveCapture } from '../../components/ActiveCapture';
+import { useModelLoader } from '../../hooks/useModelLoader';
 import { DOMAINS } from '../../domains';
 import type { SessionData } from '../../types';
 
@@ -50,6 +77,12 @@ describe('ActiveCapture', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'idle',
+      progress: 0,
+      error: null,
+      ensure: mockEnsure,
+    });
   });
 
   afterEach(() => {
@@ -92,7 +125,7 @@ describe('ActiveCapture', () => {
     expect(screen.getByText('OPERATION FIREWALL')).toBeInTheDocument();
   });
 
-  it('renders AIR-GAPPED status', () => {
+  it('renders AI status indicator', () => {
     render(
       <ActiveCapture
         session={createSession()}
@@ -101,7 +134,45 @@ describe('ActiveCapture', () => {
         onEndSession={mockEndSession}
       />,
     );
-    expect(screen.getByText('AIR-GAPPED')).toBeInTheDocument();
+    expect(screen.getByText('AI: PENDING')).toBeInTheDocument();
+  });
+
+  it('shows AI: ACTIVE when LLM is ready', () => {
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'ready',
+      progress: 1,
+      error: null,
+      ensure: mockEnsure,
+    });
+
+    render(
+      <ActiveCapture
+        session={createSession()}
+        onAddTranscript={mockAddTranscript}
+        onAddIntelligence={mockAddIntelligence}
+        onEndSession={mockEndSession}
+      />,
+    );
+    expect(screen.getByText('AI: ACTIVE')).toBeInTheDocument();
+  });
+
+  it('shows AI: KEYWORDS when LLM errors', () => {
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'error',
+      progress: 0,
+      error: 'Failed',
+      ensure: mockEnsure,
+    });
+
+    render(
+      <ActiveCapture
+        session={createSession()}
+        onAddTranscript={mockAddTranscript}
+        onAddIntelligence={mockAddIntelligence}
+        onEndSession={mockEndSession}
+      />,
+    );
+    expect(screen.getByText('AI: KEYWORDS')).toBeInTheDocument();
   });
 
   it('renders panel headers', () => {
@@ -328,5 +399,17 @@ describe('ActiveCapture', () => {
 
     // Restore
     (window as any).SpeechRecognition = origSR;
+  });
+
+  it('calls ensureLLM on mount', () => {
+    render(
+      <ActiveCapture
+        session={createSession()}
+        onAddTranscript={mockAddTranscript}
+        onAddIntelligence={mockAddIntelligence}
+        onEndSession={mockEndSession}
+      />,
+    );
+    expect(mockEnsure).toHaveBeenCalled();
   });
 });

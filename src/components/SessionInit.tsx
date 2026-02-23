@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DOMAINS } from '../domains';
+import { useModelLoader } from '../hooks/useModelLoader';
+import { ModelCategory } from '@runanywhere/web';
 import type { DomainProfile, DomainId } from '../types';
 
 interface Props {
@@ -8,6 +10,14 @@ interface Props {
 
 export function SessionInit({ onStart }: Props) {
   const [selected, setSelected] = useState<DomainId | null>(null);
+  const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
+
+  // Start model download as soon as a domain is selected
+  useEffect(() => {
+    if (selected) {
+      ensureLLM();
+    }
+  }, [selected, ensureLLM]);
 
   const handleBegin = () => {
     if (!selected) return;
@@ -40,6 +50,36 @@ export function SessionInit({ onStart }: Props) {
         ))}
       </div>
 
+      {selected && llmState === 'downloading' && (
+        <div className="llm-status">
+          <div className="llm-progress-bar">
+            <div className="llm-progress-fill" style={{ width: `${Math.round(llmProgress * 100)}%` }} />
+          </div>
+          <span className="llm-status-text">
+            LOADING AI ENGINE — {Math.round(llmProgress * 100)}%
+          </span>
+        </div>
+      )}
+      {selected && llmState === 'loading' && (
+        <div className="llm-status">
+          <span className="llm-status-text">INITIALIZING AI ENGINE...</span>
+        </div>
+      )}
+      {selected && llmState === 'ready' && (
+        <div className="llm-status">
+          <span className="llm-status-text llm-status-ready">
+            {'\u2713'} AI ENGINE READY
+          </span>
+        </div>
+      )}
+      {selected && llmState === 'error' && (
+        <div className="llm-status">
+          <span className="llm-status-text llm-status-error">
+            AI ENGINE UNAVAILABLE — KEYWORD MODE ACTIVE
+          </span>
+        </div>
+      )}
+
       <button
         className="btn-begin"
         onClick={handleBegin}
@@ -50,10 +90,10 @@ export function SessionInit({ onStart }: Props) {
 
       <div className="init-footer">
         <div className="status-dot status-secure" />
-        <span>ALL PROCESSING ON-DEVICE</span>
+        <span>AI EXTRACTION ON-DEVICE</span>
         <span className="separator">{'\u{2502}'}</span>
         <div className="status-dot status-offline" />
-        <span>ZERO NETWORK DEPENDENCY</span>
+        <span>RUNANYWHERE ENGINE</span>
       </div>
     </div>
   );

@@ -2,13 +2,35 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// Mock useModelLoader
+const mockEnsure = vi.fn(async () => true);
+vi.mock('../../hooks/useModelLoader', () => ({
+  useModelLoader: vi.fn(() => ({
+    state: 'idle',
+    progress: 0,
+    error: null,
+    ensure: mockEnsure,
+  })),
+}));
+
+vi.mock('@runanywhere/web', () => ({
+  ModelCategory: { Language: 'language' },
+}));
+
 import { SessionInit } from '../../components/SessionInit';
+import { useModelLoader } from '../../hooks/useModelLoader';
 
 describe('SessionInit', () => {
   const mockOnStart = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'idle',
+      progress: 0,
+      error: null,
+      ensure: mockEnsure,
+    });
   });
 
   it('renders the title', () => {
@@ -80,8 +102,8 @@ describe('SessionInit', () => {
 
   it('renders status footer with privacy indicators', () => {
     render(<SessionInit onStart={mockOnStart} />);
-    expect(screen.getByText('ALL PROCESSING ON-DEVICE')).toBeInTheDocument();
-    expect(screen.getByText('ZERO NETWORK DEPENDENCY')).toBeInTheDocument();
+    expect(screen.getByText('AI EXTRACTION ON-DEVICE')).toBeInTheDocument();
+    expect(screen.getByText('RUNANYWHERE ENGINE')).toBeInTheDocument();
   });
 
   it('can select different domain cards', async () => {
@@ -119,9 +141,49 @@ describe('SessionInit', () => {
     const user = userEvent.setup();
     render(<SessionInit onStart={mockOnStart} />);
 
-    // The button is disabled, but test the handler directly
     const btn = screen.getByText('BEGIN CAPTURE SESSION');
     expect(btn).toBeDisabled();
     expect(mockOnStart).not.toHaveBeenCalled();
+  });
+
+  it('triggers model download when domain is selected', async () => {
+    const user = userEvent.setup();
+    render(<SessionInit onStart={mockOnStart} />);
+
+    await user.click(screen.getByText('Security Audit'));
+
+    expect(mockEnsure).toHaveBeenCalled();
+  });
+
+  it('shows AI ENGINE READY when model is loaded', async () => {
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'ready',
+      progress: 1,
+      error: null,
+      ensure: mockEnsure,
+    });
+
+    const user = userEvent.setup();
+    render(<SessionInit onStart={mockOnStart} />);
+
+    await user.click(screen.getByText('Security Audit'));
+
+    expect(screen.getByText(/AI ENGINE READY/)).toBeInTheDocument();
+  });
+
+  it('shows keyword mode message when LLM fails', async () => {
+    (useModelLoader as ReturnType<typeof vi.fn>).mockReturnValue({
+      state: 'error',
+      progress: 0,
+      error: 'Model load failed',
+      ensure: mockEnsure,
+    });
+
+    const user = userEvent.setup();
+    render(<SessionInit onStart={mockOnStart} />);
+
+    await user.click(screen.getByText('Security Audit'));
+
+    expect(screen.getByText(/KEYWORD MODE ACTIVE/)).toBeInTheDocument();
   });
 });

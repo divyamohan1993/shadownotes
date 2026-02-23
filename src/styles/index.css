@@ -723,6 +723,53 @@ input:focus, textarea:focus, select:focus {
   user-select: none;
 }
 
+/* LLM Status & Progress */
+.llm-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  width: 100%;
+  max-width: 400px;
+}
+
+.llm-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.llm-progress-fill {
+  height: 100%;
+  background: var(--accent-amber);
+  border-radius: 2px;
+  transition: width var(--transition-normal);
+  box-shadow: 0 0 8px var(--accent-amber-glow);
+}
+
+.llm-status-text {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.llm-status-ready {
+  color: var(--green-secure);
+}
+
+.llm-status-error {
+  color: var(--accent-amber);
+}
+
+.status-loading {
+  background-color: var(--accent-amber);
+  box-shadow: 0 0 6px var(--accent-amber-glow);
+  animation: dotBreath 1s ease-in-out infinite;
+}
+
 
 /* ============================================================
    4. STAMP EFFECTS

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 
+// Mock SDK init
+vi.mock('../../runanywhere', () => ({
+  initSDK: vi.fn(async () => {}),
+}));
+
 // Mock child components to isolate App logic
 vi.mock('../../components/SessionInit', () => ({
   SessionInit: ({ onStart }: any) => (

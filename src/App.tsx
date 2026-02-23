@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { initSDK } from './runanywhere';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
 import { SessionSummary } from './components/SessionSummary';
@@ -6,25 +7,32 @@ import type { AppScreen, SessionData, DomainProfile, TranscriptEntry, Intelligen
 import { generateCaseNumber } from './domains';
 
 export function App() {
-  const [booted, setBooted] = useState(false);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [sdkError, setSdkError] = useState<string | null>(null);
   const [screen, setScreen] = useState<AppScreen>('init');
   const [session, setSession] = useState<SessionData | null>(null);
   const [bootPhase, setBootPhase] = useState(0);
 
-  // Quick boot sequence (aesthetic only — no heavy SDK init)
+  // Boot sequence with real SDK init
   useEffect(() => {
-    const boot = async () => {
+    const bootSequence = async () => {
       setBootPhase(1);
       await new Promise((r) => setTimeout(r, 400));
       setBootPhase(2);
       await new Promise((r) => setTimeout(r, 300));
       setBootPhase(3);
-      await new Promise((r) => setTimeout(r, 300));
-      setBootPhase(4);
-      await new Promise((r) => setTimeout(r, 200));
-      setBooted(true);
+
+      try {
+        await initSDK();
+        setBootPhase(4);
+        await new Promise((r) => setTimeout(r, 200));
+        setSdkReady(true);
+      } catch (err) {
+        setSdkError(err instanceof Error ? err.message : String(err));
+      }
     };
-    boot();
+
+    bootSequence();
   }, []);
 
   // Warn on tab close during active session
@@ -67,7 +75,7 @@ export function App() {
   }, []);
 
   // Boot sequence screen
-  if (!booted) {
+  if (!sdkReady) {
     return (
       <div className="boot-screen">
         <div className="boot-container">
@@ -94,6 +102,11 @@ export function App() {
               <div className={`boot-line ${bootPhase >= 4 ? 'done' : 'active'}`}>
                 <span className="boot-prefix">[AI]</span> Loading on-device inference engine...
                 {bootPhase >= 4 ? <span className="boot-check">{'\u2713'}</span> : <span className="boot-spinner" />}
+              </div>
+            )}
+            {sdkError && (
+              <div className="boot-line error">
+                <span className="boot-prefix">[ERR]</span> {sdkError}
               </div>
             )}
           </div>

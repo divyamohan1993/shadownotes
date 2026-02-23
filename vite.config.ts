@@ -8,7 +8,6 @@ const __dir = path.dirname(fileURLToPath(import.meta.url));
 
 function copyWasmPlugin(): Plugin {
   const llamacppWasm = path.resolve(__dir, 'node_modules/@runanywhere/web-llamacpp/wasm');
-  const onnxWasm = path.resolve(__dir, 'node_modules/@runanywhere/web-onnx/wasm');
 
   return {
     name: 'copy-wasm',
@@ -30,13 +29,6 @@ function copyWasmPlugin(): Plugin {
           fs.copyFileSync(srcPath, path.join(assetsDir, dest));
         }
       }
-
-      const sherpaDir = path.join(onnxWasm, 'sherpa');
-      if (fs.existsSync(sherpaDir)) {
-        for (const file of fs.readdirSync(sherpaDir)) {
-          fs.copyFileSync(path.join(sherpaDir, file), path.join(assetsDir, file));
-        }
-      }
     },
   };
 }
@@ -52,6 +44,6 @@ export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   worker: { format: 'es' },
   optimizeDeps: {
-    exclude: ['@runanywhere/web-llamacpp', '@runanywhere/web-onnx'],
+    exclude: ['@runanywhere/web-llamacpp'],
   },
 });

@@ -2,6 +2,57 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// Mock SDK modules
+vi.mock('../../runanywhere', () => ({
+  initSDK: vi.fn(async () => {}),
+}));
+
+vi.mock('../../hooks/useModelLoader', () => ({
+  useModelLoader: vi.fn(() => ({
+    state: 'idle',
+    progress: 0,
+    error: null,
+    ensure: vi.fn(async () => true),
+  })),
+}));
+
+vi.mock('@runanywhere/web', () => ({
+  ModelCategory: { Language: 'language' },
+  ModelManager: {
+    getLoadedModel: vi.fn(() => null),
+    getModels: vi.fn(() => []),
+  },
+  EventBus: { shared: { on: vi.fn(() => () => {}) } },
+}));
+
+vi.mock('@runanywhere/web-llamacpp', () => ({
+  TextGeneration: {
+    generate: vi.fn(async () => ({ text: '', tokensUsed: 0, tokensPerSecond: 0, latencyMs: 0 })),
+  },
+}));
+
+// Mock SpeechRecognition
+class MockSpeechRecognition {
+  continuous = false;
+  interimResults = false;
+  lang = '';
+  maxAlternatives = 1;
+  onresult: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+  onend: (() => void) | null = null;
+  onstart: (() => void) | null = null;
+  start = vi.fn();
+  stop = vi.fn();
+  abort = vi.fn();
+}
+
+(globalThis as any).window = globalThis.window || {};
+Object.defineProperty(window, 'SpeechRecognition', {
+  value: MockSpeechRecognition,
+  writable: true,
+  configurable: true,
+});
+
 import { App } from '../../App';
 
 describe('Integration: Full Session Flow', () => {
@@ -32,7 +83,7 @@ describe('Integration: Full Session Flow', () => {
       expect(screen.getByText('Security Audit')).toBeInTheDocument();
     });
 
-    // 3. Select domain and begin — starts immediately (no model download)
+    // 3. Select domain and begin — starts immediately
     await user.click(screen.getByText('Security Audit'));
     await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
 

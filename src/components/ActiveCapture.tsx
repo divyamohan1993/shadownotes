@@ -57,6 +57,10 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
   const llmReadyRef = useRef(false);
 
+  // Mutex for LLM generation — llama.cpp KV cache crashes on concurrent calls
+  const llmBusyRef = useRef(false);
+  const llmGenerationIdRef = useRef(0);
+
   // Keep refs in sync with state so callbacks can read current value
   useEffect(() => {
     captureStateRef.current = captureState;
@@ -98,14 +102,23 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     };
   }, []);
 
-  // LLM extraction — async, non-blocking
+  // LLM extraction — serialized to prevent KV cache crash from concurrent calls
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
+    // Skip if another generation is already running
+    if (llmBusyRef.current) return [];
+
+    const myId = ++llmGenerationIdRef.current;
+    llmBusyRef.current = true;
     try {
       const prompt = `${domain.systemPrompt}\n\nTranscript:\n${text}`;
       const { text: response } = await TextGeneration.generate(prompt);
+      // Discard result if a newer request was queued while we were running
+      if (llmGenerationIdRef.current !== myId) return [];
       return parseLLMResponse(response, domain.categories);
     } catch {
       return [];
+    } finally {
+      llmBusyRef.current = false;
     }
   }, []);
 

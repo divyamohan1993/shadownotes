@@ -8,7 +8,7 @@ export const DOMAINS: DomainProfile[] = [
     icon: '\u{1F6E1}',
     clearanceLevel: 'TOP SECRET',
     categories: ['Vulnerabilities', 'Timeline', 'Evidence', 'Affected Systems', 'Risk Assessment'],
-    systemPrompt: `You are an intelligence extraction system for security audit field notes. Analyze the following transcript and extract structured intelligence.
+    systemPrompt: `You are an intelligence extraction system for security audit field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
 
 Output EXACTLY in this format (one line per item, category prefix required):
 [Vulnerabilities] description of vulnerability found
@@ -18,10 +18,10 @@ Output EXACTLY in this format (one line per item, category prefix required):
 [Risk Assessment] risk level and justification
 
 Rules:
-- Only extract information explicitly stated in the transcript
-- Do not infer or hallucinate details
+- Correct obvious speech recognition errors using domain knowledge (e.g., "sequel injection" → SQL injection, "cross site" → cross-site scripting)
 - Each line must start with a category in square brackets
 - Be concise — one line per finding
+- Use correct technical terminology in your output even if the transcript is garbled
 - If a category has no findings, omit it`,
   },
   {
@@ -31,7 +31,7 @@ Rules:
     icon: '\u{2696}',
     clearanceLevel: 'CONFIDENTIAL',
     categories: ['Key Statements', 'Timeline', 'Parties Involved', 'Contradictions', 'Exhibits'],
-    systemPrompt: `You are an intelligence extraction system for legal deposition transcripts. Analyze the following transcript and extract structured intelligence.
+    systemPrompt: `You are an intelligence extraction system for legal deposition transcripts. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
 
 Output EXACTLY in this format (one line per item, category prefix required):
 [Key Statements] important admissions or claims made
@@ -41,10 +41,10 @@ Output EXACTLY in this format (one line per item, category prefix required):
 [Exhibits] documents, evidence, or materials referenced
 
 Rules:
-- Only extract information explicitly stated in the transcript
-- Do not infer or hallucinate details
+- Correct obvious speech recognition errors using domain knowledge (e.g., "habeas corpus" may be misheard as "hay BS corpus")
 - Each line must start with a category in square brackets
 - Be concise — one line per finding
+- Use correct legal terminology in your output even if the transcript is garbled
 - If a category has no findings, omit it`,
   },
   {
@@ -54,7 +54,7 @@ Rules:
     icon: '\u{1FA7A}',
     clearanceLevel: 'RESTRICTED',
     categories: ['Symptoms', 'Diagnoses', 'Medications', 'Vital Signs', 'Follow-up Actions'],
-    systemPrompt: `You are an intelligence extraction system for medical field notes. Analyze the following transcript and extract structured intelligence.
+    systemPrompt: `You are an intelligence extraction system for medical field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
 
 Output EXACTLY in this format (one line per item, category prefix required):
 [Symptoms] reported or observed symptoms
@@ -64,10 +64,10 @@ Output EXACTLY in this format (one line per item, category prefix required):
 [Follow-up Actions] recommended next steps or referrals
 
 Rules:
-- Only extract information explicitly stated in the transcript
-- Do not infer or hallucinate details
+- Correct obvious speech recognition errors using medical knowledge (e.g., "Telmo Satan" → Telmisartan, "parse atomol" → Paracetamol, "amma doxie Selin" → Amoxicillin)
 - Each line must start with a category in square brackets
 - Be concise — one line per finding
+- Use correct medical/pharmaceutical terminology in your output even if the transcript is garbled
 - If a category has no findings, omit it`,
   },
   {
@@ -77,7 +77,7 @@ Rules:
     icon: '\u{1F6A8}',
     clearanceLevel: 'SECRET',
     categories: ['Incident Timeline', 'Witnesses', 'Damage Assessment', 'Root Cause', 'Next Steps'],
-    systemPrompt: `You are an intelligence extraction system for incident report field notes. Analyze the following transcript and extract structured intelligence.
+    systemPrompt: `You are an intelligence extraction system for incident report field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
 
 Output EXACTLY in this format (one line per item, category prefix required):
 [Incident Timeline] chronological sequence of events
@@ -87,10 +87,10 @@ Output EXACTLY in this format (one line per item, category prefix required):
 [Next Steps] immediate actions required or recommendations
 
 Rules:
-- Only extract information explicitly stated in the transcript
-- Do not infer or hallucinate details
+- Correct obvious speech recognition errors using domain knowledge (e.g., misheard proper nouns, technical terms, locations)
 - Each line must start with a category in square brackets
 - Be concise — one line per finding
+- Use correct terminology in your output even if the transcript is garbled
 - If a category has no findings, omit it`,
   },
 ];

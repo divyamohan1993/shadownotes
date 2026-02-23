@@ -62,7 +62,7 @@ describe('DOMAINS', () => {
 
     it('system prompt includes extraction rules', () => {
       expect(domain.systemPrompt).toContain('Rules:');
-      expect(domain.systemPrompt).toContain('Do not infer or hallucinate');
+      expect(domain.systemPrompt).toContain('Correct obvious speech recognition errors');
       expect(domain.systemPrompt).toContain('square brackets');
     });
 

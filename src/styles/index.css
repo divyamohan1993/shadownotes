@@ -1103,22 +1103,16 @@ input:focus, textarea:focus, select:focus {
 .vad-bar {
   width: 3px;
   min-height: 3px;
-  height: 3px;
+  height: 4px;
   background: var(--accent-amber);
   border-radius: 1px;
-  transition: height 0.1s ease;
   transform-origin: bottom;
-  opacity: 0.8;
+  opacity: 0.4;
 }
 
-.vad-bar:nth-child(1) { animation: vadBounce 0.8s ease-in-out infinite 0ms; }
-.vad-bar:nth-child(2) { animation: vadBounce 0.8s ease-in-out infinite 100ms; }
-.vad-bar:nth-child(3) { animation: vadBounce 0.8s ease-in-out infinite 200ms; }
-.vad-bar:nth-child(4) { animation: vadBounce 0.8s ease-in-out infinite 300ms; }
-.vad-bar:nth-child(5) { animation: vadBounce 0.8s ease-in-out infinite 150ms; }
-
-.vad-bar.active {
+.vad-bar-active {
   opacity: 1;
+  animation: vadBounce 0.8s ease-in-out infinite;
 }
 
 /* Capture button */

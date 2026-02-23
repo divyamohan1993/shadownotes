@@ -1,7 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { ModelCategory, ModelManager } from '@runanywhere/web';
-import { TextGeneration } from '@runanywhere/web-llamacpp';
-import { AudioCapture, VAD, SpeechActivity } from '@runanywhere/web-onnx';
+import { extractIntelligence } from '../extraction';
 import type { SessionData, TranscriptEntry, IntelligenceItem } from '../types';
 
 interface Props {
@@ -11,60 +9,21 @@ interface Props {
   onEndSession: () => void;
 }
 
-type CaptureState = 'idle' | 'listening' | 'processing-stt' | 'processing-llm';
+type CaptureState = 'idle' | 'listening';
 
 export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onEndSession }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
-  const [processingText, setProcessingText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState('00:00:00');
 
-  const micRef = useRef<AudioCapture | null>(null);
-  const vadUnsub = useRef<(() => void) | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  // Audio level stored in ref — never triggers re-render
-  const audioLevelRef = useRef(0);
-  const barsRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef(0);
-
-  // Throttle VAD: skip chunks if main thread is overloaded
-  const vadBusyRef = useRef(false);
-
-  // Animate VAD bars via rAF — ~15fps cap to stay gentle on slow CPUs
-  const lastBarUpdate = useRef(0);
+  // Keep ref in sync with state so callbacks can read current value
   useEffect(() => {
-    let running = true;
-    const animate = (now: number) => {
-      if (!running) return;
-      // Cap bar updates to ~15fps (66ms)
-      if (now - lastBarUpdate.current > 66) {
-        lastBarUpdate.current = now;
-        const container = barsRef.current;
-        if (container) {
-          const level = audioLevelRef.current;
-          const bars = container.children;
-          for (let i = 0; i < bars.length; i++) {
-            const bar = bars[i] as HTMLElement;
-            if (captureState === 'listening') {
-              // Use sin-based pseudo-random so it's deterministic per-bar + time
-              const phase = (now * 0.003) + (i * 0.8);
-              const wave = 0.5 + 0.5 * Math.sin(phase);
-              bar.style.height = `${Math.max(4, level * 40 * (0.4 + wave * 0.6))}px`;
-            } else {
-              bar.style.height = '4px';
-            }
-          }
-        }
-      }
-      rafRef.current = requestAnimationFrame(animate);
-    };
-    rafRef.current = requestAnimationFrame(animate);
-    return () => {
-      running = false;
-      cancelAnimationFrame(rafRef.current);
-    };
+    captureStateRef.current = captureState;
   }, [captureState]);
 
   // Session timer
@@ -87,131 +46,79 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      micRef.current?.stop();
-      vadUnsub.current?.();
-      cancelAnimationFrame(rafRef.current);
+      recognitionRef.current?.abort();
     };
   }, []);
 
-  const processSegment = useCallback(async (audioData: Float32Array) => {
-    setCaptureState('processing-stt');
-    setProcessingText('Transcribing speech...');
-
-    try {
-      const { STT } = await import('@runanywhere/web-onnx');
-
-      const sttResult = await STT.transcribe(audioData);
-      const text = sttResult?.text?.trim();
-
-      if (!text) {
-        setCaptureState('listening');
-        setProcessingText('');
-        return;
-      }
-
-      const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-      const entry: TranscriptEntry = { text, timestamp };
-      onAddTranscript(entry);
-      setLiveTranscript('');
-
-      // Now run LLM analysis
-      setCaptureState('processing-llm');
-      setProcessingText('Extracting intelligence...');
-
-      // Cap transcript context to last 10 segments to limit LLM input size
-      const recentTranscripts = [...session.transcripts, entry].slice(-10);
-      const fullTranscript = recentTranscripts.map((t) => t.text).join(' ');
-
-      const { result: resultPromise } = await TextGeneration.generateStream(
-        `Transcript:\n"${fullTranscript}"\n\nExtract intelligence:`,
-        {
-          systemPrompt: session.domain.systemPrompt,
-          maxTokens: 256,
-          temperature: 0.3,
-        },
-      );
-
-      const result = await resultPromise;
-      const responseText = result.text || '';
-
-      // Parse bracketed categories
-      const items: IntelligenceItem[] = [];
-      const lines = responseText.split('\n').filter((l) => l.trim());
-
-      for (const line of lines) {
-        const match = line.match(/^\[([^\]]+)\]\s*(.+)/);
-        if (match) {
-          items.push({
-            category: match[1],
-            content: match[2].trim(),
-            timestamp,
-          });
-        }
-      }
-
-      if (items.length > 0) {
-        onAddIntelligence(items);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Show error but don't break capture — allow retrying on next speech segment
-      setError(msg);
-    }
-
-    setCaptureState('listening');
-    setProcessingText('');
-  }, [session, onAddTranscript, onAddIntelligence]);
-
-  const startCapture = useCallback(async () => {
+  const startCapture = useCallback(() => {
     setError(null);
 
-    // Verify models are loaded
-    if (!ModelManager.getLoadedModel(ModelCategory.Audio)
-      || !ModelManager.getLoadedModel(ModelCategory.SpeechRecognition)
-      || !ModelManager.getLoadedModel(ModelCategory.Language)) {
-      setError('Required models not loaded. Return to session init.');
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setError('Speech recognition not supported in this browser. Use Chrome, Edge, or Safari.');
       return;
     }
 
-    setCaptureState('listening');
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
 
-    const mic = new AudioCapture({ sampleRate: 16000 });
-    micRef.current = mic;
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          const text = result[0].transcript.trim();
+          if (text) {
+            const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+            onAddTranscript({ text, timestamp });
 
-    VAD.reset();
-
-    vadUnsub.current = VAD.onSpeechActivity((activity) => {
-      if (activity === SpeechActivity.Ended) {
-        const segment = VAD.popSpeechSegment();
-        if (segment && segment.samples.length > 1600) {
-          processSegment(segment.samples);
+            // Run lightweight keyword extraction — instant, zero memory
+            const items = extractIntelligence(text, session.domain.id);
+            if (items.length > 0) {
+              onAddIntelligence(items);
+            }
+          }
+          setLiveTranscript('');
+        } else {
+          interim += result[0].transcript;
         }
       }
-    });
+      if (interim) {
+        setLiveTranscript(interim);
+      }
+    };
 
-    await mic.start(
-      (chunk) => {
-        // Throttle: skip VAD processing if a previous chunk is still being processed
-        if (vadBusyRef.current) return;
-        vadBusyRef.current = true;
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // 'no-speech' and 'aborted' are normal — don't show to user
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setError(`Speech recognition error: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if still in listening mode (browser stops after silence)
+      if (captureStateRef.current === 'listening') {
         try {
-          VAD.processSamples(chunk);
-        } finally {
-          vadBusyRef.current = false;
+          recognition.start();
+        } catch {
+          // May fail if already started — safe to ignore
         }
-      },
-      (level) => {
-        // Store in ref — no React re-render, bar animation reads from ref via rAF
-        audioLevelRef.current = level;
-      },
-    );
-  }, [processSegment]);
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setCaptureState('listening');
+  }, [session.domain.id, onAddTranscript, onAddIntelligence]);
 
   const stopCapture = useCallback(() => {
-    micRef.current?.stop();
-    vadUnsub.current?.();
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
     setCaptureState('idle');
-    audioLevelRef.current = 0;
+    setLiveTranscript('');
   }, []);
 
   const handleEndSession = useCallback(() => {
@@ -289,23 +196,19 @@ export function ActiveCapture({ session, onAddTranscript, onAddIntelligence, onE
             )}
           </div>
 
-          {/* VAD / Mic controls */}
+          {/* Capture controls */}
           <div className="capture-controls">
             <div className="vad-indicator" data-state={captureState}>
-              <div className="vad-bars" ref={barsRef}>
+              <div className="vad-bars">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <div
                     key={i}
-                    className="vad-bar"
-                    style={{ height: '4px' }}
+                    className={`vad-bar ${captureState === 'listening' ? 'vad-bar-active' : ''}`}
+                    style={{ animationDelay: `${i * 0.08}s` }}
                   />
                 ))}
               </div>
             </div>
-
-            {processingText && (
-              <div className="processing-status">{processingText}</div>
-            )}
 
             {captureState === 'idle' ? (
               <button className="btn-capture" onClick={startCapture}>

@@ -1,18 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 
-// Mock SDK modules
-vi.mock('@runanywhere/web', () => import('../__mocks__/runanywhere-web'));
-vi.mock('@runanywhere/web-llamacpp', () => import('../__mocks__/runanywhere-web-llamacpp'));
-vi.mock('@runanywhere/web-onnx', () => import('../__mocks__/runanywhere-web-onnx'));
-
-// Mock initSDK
-const mockInitSDK = vi.fn(async () => {});
-vi.mock('../../runanywhere', () => ({
-  initSDK: () => mockInitSDK(),
-  getAccelerationMode: () => 'cpu',
-}));
-
 // Mock child components to isolate App logic
 vi.mock('../../components/SessionInit', () => ({
   SessionInit: ({ onStart }: any) => (
@@ -23,7 +11,7 @@ vi.mock('../../components/SessionInit', () => ({
           id: 'security',
           name: 'Security Audit',
           codename: 'OPERATION FIREWALL',
-          icon: '🛡',
+          icon: '\u{1F6E1}',
           clearanceLevel: 'TOP SECRET',
           categories: ['Vulnerabilities'],
           systemPrompt: 'test prompt',
@@ -61,7 +49,6 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    mockInitSDK.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -89,43 +76,29 @@ describe('App', () => {
 
     // Advance to phase 2
     await act(async () => {
-      vi.advanceTimersByTime(700);
+      vi.advanceTimersByTime(500);
     });
 
     expect(screen.getByText(/Verifying air-gap integrity/)).toBeInTheDocument();
 
     // Advance to phase 3
     await act(async () => {
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(400);
     });
 
     expect(screen.getByText(/Loading on-device inference engine/)).toBeInTheDocument();
   });
 
-  it('transitions to SessionInit after SDK loads', async () => {
+  it('transitions to SessionInit after boot completes', async () => {
     render(<App />);
 
-    // Advance through boot sequence (600 + 400 + SDK + 300)
+    // Advance through boot sequence (400 + 300 + 300 + 200 = 1200ms)
     await act(async () => {
       vi.advanceTimersByTime(2000);
     });
 
     await waitFor(() => {
       expect(screen.getByTestId('session-init')).toBeInTheDocument();
-    });
-  });
-
-  it('shows error on boot when SDK fails', async () => {
-    mockInitSDK.mockRejectedValue(new Error('WASM load failed'));
-
-    render(<App />);
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('WASM load failed')).toBeInTheDocument();
     });
   });
 
@@ -161,19 +134,5 @@ describe('App', () => {
     });
 
     expect(screen.getByTestId('session-init')).toBeInTheDocument();
-  });
-
-  it('handles non-Error SDK failure objects', async () => {
-    mockInitSDK.mockRejectedValue('string error message');
-
-    render(<App />);
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('string error message')).toBeInTheDocument();
-    });
   });
 });

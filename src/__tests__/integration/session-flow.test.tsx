@@ -2,35 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// Mock SDK modules
-vi.mock('@runanywhere/web', () => import('../__mocks__/runanywhere-web'));
-vi.mock('@runanywhere/web-llamacpp', () => import('../__mocks__/runanywhere-web-llamacpp'));
-vi.mock('@runanywhere/web-onnx', () => import('../__mocks__/runanywhere-web-onnx'));
-
-vi.mock('../../runanywhere', () => ({
-  initSDK: vi.fn(async () => {}),
-  getAccelerationMode: () => 'cpu',
-}));
-
-// Fully working useModelLoader mock
-vi.mock('../../hooks/useModelLoader', () => ({
-  useModelLoader: vi.fn(() => ({
-    state: 'ready' as const,
-    progress: 1,
-    error: null,
-    ensure: vi.fn(async () => true),
-  })),
-}));
-
 import { App } from '../../App';
-import { ModelManager, ModelCategory } from '@runanywhere/web';
 
 describe('Integration: Full Session Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    // All models loaded
-    (ModelManager.getLoadedModel as any).mockReturnValue({ id: 'mock' });
   });
 
   afterEach(() => {
@@ -55,13 +32,9 @@ describe('Integration: Full Session Flow', () => {
       expect(screen.getByText('Security Audit')).toBeInTheDocument();
     });
 
-    // 3. Select domain and begin
+    // 3. Select domain and begin — starts immediately (no model download)
     await user.click(screen.getByText('Security Audit'));
     await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
-
-    await act(async () => {
-      vi.advanceTimersByTime(600);
-    });
 
     // 4. Active capture screen
     await waitFor(() => {
@@ -100,7 +73,6 @@ describe('Integration: Domain Selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    (ModelManager.getLoadedModel as any).mockReturnValue({ id: 'mock' });
   });
 
   afterEach(() => {
@@ -127,10 +99,6 @@ describe('Integration: Domain Selection', () => {
     await user.click(screen.getByText(domainName));
     await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
 
-    await act(async () => {
-      vi.advanceTimersByTime(600);
-    });
-
     await waitFor(() => {
       expect(screen.getByText(codename)).toBeInTheDocument();
       expect(screen.getByText(clearance)).toBeInTheDocument();
@@ -142,7 +110,6 @@ describe('Integration: Ephemeral Storage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    (ModelManager.getLoadedModel as any).mockReturnValue({ id: 'mock' });
   });
 
   afterEach(() => {
@@ -165,8 +132,8 @@ describe('Integration: Ephemeral Storage', () => {
     await user.click(screen.getByText('Security Audit'));
     await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
 
-    await act(async () => {
-      vi.advanceTimersByTime(600);
+    await waitFor(() => {
+      expect(screen.getByText(/CASE: SN-/)).toBeInTheDocument();
     });
 
     // End session

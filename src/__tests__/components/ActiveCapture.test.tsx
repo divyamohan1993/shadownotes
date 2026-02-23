@@ -1,13 +1,33 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
-// Mock SDK modules
-vi.mock('@runanywhere/web', () => import('../__mocks__/runanywhere-web'));
-vi.mock('@runanywhere/web-llamacpp', () => import('../__mocks__/runanywhere-web-llamacpp'));
-vi.mock('@runanywhere/web-onnx', () => import('../__mocks__/runanywhere-web-onnx'));
+// Mock SpeechRecognition API
+const mockStart = vi.fn();
+const mockStop = vi.fn();
+const mockAbort = vi.fn();
+
+class MockSpeechRecognition {
+  continuous = false;
+  interimResults = false;
+  lang = '';
+  maxAlternatives = 1;
+  onresult: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+  onend: (() => void) | null = null;
+  onstart: (() => void) | null = null;
+  start = mockStart;
+  stop = mockStop;
+  abort = mockAbort;
+}
+
+(globalThis as any).window = globalThis.window || {};
+Object.defineProperty(window, 'SpeechRecognition', {
+  value: MockSpeechRecognition,
+  writable: true,
+  configurable: true,
+});
 
 import { ActiveCapture } from '../../components/ActiveCapture';
-import { ModelManager, ModelCategory } from '@runanywhere/web';
 import { DOMAINS } from '../../domains';
 import type { SessionData } from '../../types';
 
@@ -157,8 +177,24 @@ describe('ActiveCapture', () => {
     expect(screen.getByText(/Intelligence extractions will appear/)).toBeInTheDocument();
   });
 
-  it('shows error when models not loaded and BEGIN CAPTURE clicked', async () => {
-    (ModelManager.getLoadedModel as any).mockReturnValue(null);
+  it('starts SpeechRecognition when BEGIN CAPTURE clicked', async () => {
+    render(
+      <ActiveCapture
+        session={createSession()}
+        onAddTranscript={mockAddTranscript}
+        onAddIntelligence={mockAddIntelligence}
+        onEndSession={mockEndSession}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('BEGIN CAPTURE'));
+    expect(mockStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows error when SpeechRecognition not supported', async () => {
+    const origSR = window.SpeechRecognition;
+    (window as any).SpeechRecognition = undefined;
+    (window as any).webkitSpeechRecognition = undefined;
 
     render(
       <ActiveCapture
@@ -172,8 +208,11 @@ describe('ActiveCapture', () => {
     fireEvent.click(screen.getByText('BEGIN CAPTURE'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Required models not loaded/)).toBeInTheDocument();
+      expect(screen.getByText(/Speech recognition not supported/)).toBeInTheDocument();
     });
+
+    // Restore
+    (window as any).SpeechRecognition = origSR;
   });
 
   it('calls onEndSession when END SESSION clicked', () => {
@@ -263,7 +302,9 @@ describe('ActiveCapture', () => {
   });
 
   it('error can be dismissed', async () => {
-    (ModelManager.getLoadedModel as any).mockReturnValue(null);
+    const origSR = window.SpeechRecognition;
+    (window as any).SpeechRecognition = undefined;
+    (window as any).webkitSpeechRecognition = undefined;
 
     render(
       <ActiveCapture
@@ -277,12 +318,15 @@ describe('ActiveCapture', () => {
     fireEvent.click(screen.getByText('BEGIN CAPTURE'));
 
     await waitFor(() => {
-      expect(screen.getByText(/Required models not loaded/)).toBeInTheDocument();
+      expect(screen.getByText(/Speech recognition not supported/)).toBeInTheDocument();
     });
 
     // Click the dismiss button (X)
     fireEvent.click(screen.getByText('\u2715'));
 
-    expect(screen.queryByText(/Required models not loaded/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Speech recognition not supported/)).not.toBeInTheDocument();
+
+    // Restore
+    (window as any).SpeechRecognition = origSR;
   });
 });

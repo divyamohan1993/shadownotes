@@ -114,8 +114,15 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
     try {
-      const prompt = `${domain.systemPrompt}\n\nTranscript:\n${text}`;
-      const { text: response } = await TextGeneration.generate(prompt);
+      const { text: response } = await TextGeneration.generate(
+        `Transcript:\n${text}`,
+        {
+          systemPrompt: domain.systemPrompt,
+          maxTokens: 250,
+          temperature: 0.3,
+          topP: 0.9,
+        },
+      );
       // Discard result if a newer request was queued while we were running
       if (llmGenerationIdRef.current !== myId) return [];
       return parseLLMResponse(response, domain.categories);

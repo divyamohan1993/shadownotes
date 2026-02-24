@@ -8,21 +8,22 @@ export const DOMAINS: DomainProfile[] = [
     icon: '\u{1F6E1}',
     clearanceLevel: 'TOP SECRET',
     categories: ['Vulnerabilities', 'Timeline', 'Evidence', 'Affected Systems', 'Risk Assessment'],
-    systemPrompt: `You are an intelligence extraction system for security audit field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
+    systemPrompt: `Extract security findings from this speech transcript. Fix speech errors. Output ONLY short facts, not sentences.
 
-Output EXACTLY in this format (one line per item, category prefix required):
-[Vulnerabilities] description of vulnerability found
-[Timeline] timestamp or sequence of events
-[Evidence] specific evidence or artifacts mentioned
-[Affected Systems] systems, servers, networks mentioned
-[Risk Assessment] risk level and justification
+Format — one fact per line:
+[Vulnerabilities] single vulnerability found
+[Timeline] single timestamp or event
+[Evidence] single artifact or evidence item
+[Affected Systems] single system or network
+[Risk Assessment] risk level with brief reason
+
+Speech fixes: "sequel injection" → SQL injection, "cross site" → XSS, "ess ess eich" → SSH, "de-en-ess" → DNS.
 
 Rules:
-- Correct obvious speech recognition errors using domain knowledge (e.g., "sequel injection" → SQL injection, "cross site" → cross-site scripting)
-- Each line must start with a category in square brackets
-- Be concise — one line per finding
-- Use correct technical terminology in your output even if the transcript is garbled
-- If a category has no findings, omit it`,
+- Extract ONLY the key data, never repeat full sentences
+- One finding per line, one category tag per line
+- Fix all speech recognition errors using security knowledge
+- Omit categories with no findings`,
   },
   {
     id: 'legal',
@@ -31,21 +32,22 @@ Rules:
     icon: '\u{2696}',
     clearanceLevel: 'CONFIDENTIAL',
     categories: ['Key Statements', 'Timeline', 'Parties Involved', 'Contradictions', 'Exhibits'],
-    systemPrompt: `You are an intelligence extraction system for legal deposition transcripts. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
+    systemPrompt: `Extract legal findings from this speech transcript. Fix speech errors. Output ONLY short facts, not sentences.
 
-Output EXACTLY in this format (one line per item, category prefix required):
-[Key Statements] important admissions or claims made
-[Timeline] dates, times, sequence of events mentioned
-[Parties Involved] names, roles, relationships mentioned
-[Contradictions] inconsistencies in statements
-[Exhibits] documents, evidence, or materials referenced
+Format — one fact per line:
+[Key Statements] single admission or claim
+[Timeline] single date, time, or event
+[Parties Involved] name and role
+[Contradictions] single inconsistency
+[Exhibits] single document or evidence
+
+Speech fixes: "hay BS corpus" → habeas corpus, "nolo contend airy" → nolo contendere.
 
 Rules:
-- Correct obvious speech recognition errors using domain knowledge (e.g., "habeas corpus" may be misheard as "hay BS corpus")
-- Each line must start with a category in square brackets
-- Be concise — one line per finding
-- Use correct legal terminology in your output even if the transcript is garbled
-- If a category has no findings, omit it`,
+- Extract ONLY the key data, never repeat full sentences
+- One finding per line, one category tag per line
+- Fix all speech recognition errors using legal knowledge
+- Omit categories with no findings`,
   },
   {
     id: 'medical',
@@ -53,22 +55,33 @@ Rules:
     codename: 'OPERATION VITALS',
     icon: '\u{1FA7A}',
     clearanceLevel: 'RESTRICTED',
-    categories: ['Symptoms', 'Diagnoses', 'Medications', 'Vital Signs', 'Follow-up Actions'],
-    systemPrompt: `You are an intelligence extraction system for medical field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
+    categories: ['Patient Info', 'Symptoms', 'Diagnoses', 'Medications', 'Vital Signs', 'Follow-up Actions'],
+    systemPrompt: `Extract medical data from this speech transcript. Fix speech errors. Output ONLY short facts, not sentences.
 
-Output EXACTLY in this format (one line per item, category prefix required):
-[Symptoms] reported or observed symptoms
-[Diagnoses] conditions or diagnoses mentioned
-[Medications] drugs, dosages, treatments mentioned
-[Vital Signs] any measurements or vitals reported
-[Follow-up Actions] recommended next steps or referrals
+Format — one fact per line:
+[Patient Info] name, age, or gender
+[Symptoms] single symptom
+[Diagnoses] single diagnosis
+[Medications] drug name and dose
+[Vital Signs] single measurement
+[Follow-up Actions] single action
+
+Speech fixes: "Tell me Satin" → Telmisartan, "parse atomol" → Paracetamol, "amma doxie Selin" → Amoxicillin, "SPO 2" → SpO2, "bee pee" → BP.
+
+Example input: "Patient named Sara she had a BP of 140 by 72 and SPO 2 of 95 she has headache I gave parse atomol and Tell me Satin 80 mg"
+Example output:
+[Patient Info] Sara
+[Symptoms] Headache
+[Vital Signs] BP 140/72
+[Vital Signs] SpO2 95
+[Medications] Paracetamol
+[Medications] Telmisartan 80mg
 
 Rules:
-- Correct obvious speech recognition errors using medical knowledge (e.g., "Telmo Satan" → Telmisartan, "parse atomol" → Paracetamol, "amma doxie Selin" → Amoxicillin)
-- Each line must start with a category in square brackets
-- Be concise — one line per finding
-- Use correct medical/pharmaceutical terminology in your output even if the transcript is garbled
-- If a category has no findings, omit it`,
+- Extract ONLY the key data, never repeat full sentences
+- One finding per line, one category tag per line
+- Fix all speech recognition errors using medical knowledge
+- Omit categories with no findings`,
   },
   {
     id: 'incident',
@@ -77,21 +90,20 @@ Rules:
     icon: '\u{1F6A8}',
     clearanceLevel: 'SECRET',
     categories: ['Incident Timeline', 'Witnesses', 'Damage Assessment', 'Root Cause', 'Next Steps'],
-    systemPrompt: `You are an intelligence extraction system for incident report field notes. Analyze the following transcript (captured via speech-to-text, which may contain misheard words) and extract structured intelligence.
+    systemPrompt: `Extract incident details from this speech transcript. Fix speech errors. Output ONLY short facts, not sentences.
 
-Output EXACTLY in this format (one line per item, category prefix required):
-[Incident Timeline] chronological sequence of events
-[Witnesses] people present or who observed the incident
-[Damage Assessment] extent of damage, injuries, or impact
-[Root Cause] contributing factors or causes identified
-[Next Steps] immediate actions required or recommendations
+Format — one fact per line:
+[Incident Timeline] single event with time
+[Witnesses] single person name or role
+[Damage Assessment] single damage item
+[Root Cause] single contributing factor
+[Next Steps] single action item
 
 Rules:
-- Correct obvious speech recognition errors using domain knowledge (e.g., misheard proper nouns, technical terms, locations)
-- Each line must start with a category in square brackets
-- Be concise — one line per finding
-- Use correct terminology in your output even if the transcript is garbled
-- If a category has no findings, omit it`,
+- Extract ONLY the key data, never repeat full sentences
+- One finding per line, one category tag per line
+- Fix all speech recognition errors using domain knowledge
+- Omit categories with no findings`,
   },
 ];
 

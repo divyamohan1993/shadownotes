@@ -7,6 +7,14 @@ interface ExtractionRule {
 
 const MEDICAL_RULES: ExtractionRule[] = [
   {
+    category: 'Patient Info',
+    patterns: [
+      /patient\s+(?:named?|is|called)\s+\w+/i, /\bname\s*(?:is|:)\s*\w+/i,
+      /\b(?:mr|mrs|ms|miss|dr)\.?\s+\w+/i, /\byear[s]?\s*old\b/i,
+      /\bage\s*(?:is|:|\d)/i, /\bmale\b/i, /\bfemale\b/i, /\bpatient\b.*\bnamed?\b/i,
+    ],
+  },
+  {
     category: 'Vital Signs',
     patterns: [
       /\d+\s*(?:\/|over)\s*\d+/i, /blood pressure/i, /heart rate/i, /\bbpm\b/i,

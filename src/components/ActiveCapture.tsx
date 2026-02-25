@@ -59,7 +59,8 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const lastFinalTextRef = useRef('');
   const lastFinalTimeRef = useRef(0);
   const pendingExtractionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastExtractedTextRef = useRef('');
+  // Accumulate ALL transcript segments since last extraction so LLM gets full context
+  const accumulatedTextRef = useRef('');
 
   // LLM model loader
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
@@ -119,7 +120,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     llmBusyRef.current = true;
     try {
       const { text: response } = await TextGeneration.generate(
-        `Transcript:\n${text}`,
+        `Transcript:\n${text}\n\nExtract key facts only:`,
         {
           systemPrompt: domain.systemPrompt,
           maxTokens: perfConfig.maxTokens,
@@ -202,30 +203,43 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           }
           lastFinalTimeRef.current = now;
 
-          // Debounce extraction: wait for refinements to settle before extracting.
+          // Accumulate text for batch extraction.
+          // On refinement the last segment was updated in-place, so replace
+          // the last accumulated segment with the longer version.
+          if (isRefinement) {
+            const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
+            parts[parts.length - 1] = lastFinalTextRef.current;
+            accumulatedTextRef.current = parts.join('\n');
+          } else {
+            accumulatedTextRef.current += (accumulatedTextRef.current ? '\n' : '') + text;
+          }
+
+          // Wait for 3 seconds of silence, then run extraction ONCE on
+          // the full accumulated transcript.
           if (pendingExtractionRef.current) {
             clearTimeout(pendingExtractionRef.current);
           }
-          lastExtractedTextRef.current = lastFinalTextRef.current;
           pendingExtractionRef.current = setTimeout(() => {
             pendingExtractionRef.current = null;
-            const finalText = lastExtractedTextRef.current;
+            const fullText = accumulatedTextRef.current;
+            accumulatedTextRef.current = '';
+            if (!fullText) return;
             if (perfConfig.llmEnabled && llmReadyRef.current) {
-              tryLLMExtraction(finalText, session.domain).then(items => {
+              tryLLMExtraction(fullText, session.domain).then(items => {
                 if (items.length > 0) {
                   onAddIntelligence(items);
                 } else {
-                  const kwItems = extractIntelligence(finalText, session.domain.id);
+                  const kwItems = extractIntelligence(fullText, session.domain.id);
                   if (kwItems.length > 0) onAddIntelligence(kwItems);
                 }
               });
             } else {
-              const items = extractIntelligence(finalText, session.domain.id);
+              const items = extractIntelligence(fullText, session.domain.id);
               if (items.length > 0) {
                 onAddIntelligence(items);
               }
             }
-          }, perfConfig.extractionDebounceMs);
+          }, 3000);
 
           setLiveTranscript('');
         } else {
@@ -262,7 +276,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction, perfConfig.extractionDebounceMs, perfConfig.llmEnabled, perfConfig.interimThrottleMs]);
+  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction, perfConfig.llmEnabled, perfConfig.interimThrottleMs]);
 
   const stopCapture = useCallback(() => {
     recognitionRef.current?.stop();
@@ -273,7 +287,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     }
     lastFinalTextRef.current = '';
     lastFinalTimeRef.current = 0;
-    lastExtractedTextRef.current = '';
+    accumulatedTextRef.current = '';
     setCaptureState('idle');
     setLiveTranscript('');
   }, []);

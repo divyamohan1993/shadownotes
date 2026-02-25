@@ -196,9 +196,10 @@ export function extractIntelligence(text: string, domainId: DomainId): Intellige
   const rules = DOMAIN_RULES[domainId];
   if (!rules) return [];
 
-  // Split into sentences (by period, question mark, exclamation, or semicolon)
+  // Split into segments by punctuation, newlines, commas, or "and"/"then" connectors.
+  // Speech transcripts lack punctuation — segments arrive as newline-separated lines.
   const sentences = text
-    .split(/[.!?;]+/)
+    .split(/[.!?;\n]+|,\s+(?:and|then|also|next|plus)\s+/i)
     .map((s) => s.trim())
     .filter((s) => s.length > 3);
 
@@ -209,7 +210,6 @@ export function extractIntelligence(text: string, domainId: DomainId): Intellige
   for (const sentence of sentences) {
     for (const rule of rules) {
       if (rule.patterns.some((p) => p.test(sentence))) {
-        // Avoid duplicate content
         const key = `${rule.category}:${sentence.toLowerCase()}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -220,7 +220,7 @@ export function extractIntelligence(text: string, domainId: DomainId): Intellige
             timestamp,
           });
         }
-        break; // Each sentence goes to first matching category
+        // Don't break — a segment can match multiple categories
       }
     }
   }

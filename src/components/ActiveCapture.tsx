@@ -121,8 +121,22 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
     try {
+      // Build a concise prompt with inline format example for better compliance
+      const catList = domain.categories.join(', ');
+      const userPrompt = `Extract facts from this transcript. Use ONLY these categories: ${catList}
+
+Format each line exactly as: [Category] fact
+Example:
+[${domain.categories[0]}] example fact
+[${domain.categories[1]}] example fact
+
+Transcript:
+${text}
+
+Extracted facts:`;
+
       const generatePromise = TextGeneration.generate(
-        `Transcript:\n${text}\n\nExtract key facts only:`,
+        userPrompt,
         {
           systemPrompt: domain.systemPrompt,
           maxTokens: perfConfig.maxTokens,

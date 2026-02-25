@@ -16,7 +16,7 @@ interface Props {
   onEndSession: () => void;
 }
 
-type CaptureState = 'idle' | 'listening';
+type CaptureState = 'idle' | 'listening' | 'extracting';
 
 function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
   const items: IntelligenceItem[] = [];
@@ -248,6 +248,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const runExtraction = useCallback((fullText: string) => {
     if (!fullText) return;
     if (perfConfig.llmEnabled && llmReadyRef.current) {
+      setCaptureState('extracting');
       tryLLMExtraction(fullText, session.domain).then(items => {
         if (items.length > 0) {
           onAddIntelligence(items);
@@ -255,6 +256,8 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           const kwItems = extractIntelligence(fullText, session.domain.id);
           if (kwItems.length > 0) onAddIntelligence(kwItems);
         }
+      }).finally(() => {
+        setCaptureState('idle');
       });
     } else {
       const items = extractIntelligence(fullText, session.domain.id);
@@ -271,13 +274,20 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     // Extract intelligence from everything said during this capture session
     const fullText = accumulatedTextRef.current;
     accumulatedTextRef.current = '';
-    runExtraction(fullText);
 
     lastFinalTextRef.current = '';
     lastFinalTimeRef.current = 0;
-    setCaptureState('idle');
     setLiveTranscript('');
-  }, [runExtraction]);
+
+    // runExtraction sets 'extracting' state if LLM is used, then 'idle' when done.
+    // If no LLM or no text, go idle immediately.
+    if (fullText && perfConfig.llmEnabled && llmReadyRef.current) {
+      runExtraction(fullText);
+    } else {
+      if (fullText) runExtraction(fullText);
+      setCaptureState('idle');
+    }
+  }, [runExtraction, perfConfig.llmEnabled]);
 
   const handleEndSession = useCallback(() => {
     stopCapture();
@@ -293,6 +303,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
 
   // LLM status label for header
   const llmStatusLabel = (() => {
+    if (captureState === 'extracting') return 'AI: EXTRACTING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
@@ -316,7 +327,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
         </div>
         <div className="capture-header-right">
           <div className="status-indicator">
-            <div className={`status-dot ${llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
+            <div className={`status-dot ${captureState === 'extracting' ? 'status-extracting' : llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
           <button className="btn-end" onClick={handleEndSession}>
@@ -387,6 +398,11 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
                 <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
                 BEGIN CAPTURE
               </button>
+            ) : captureState === 'extracting' ? (
+              <button className="btn-capture btn-capture-extracting" disabled>
+                <span className="extracting-spinner" />
+                EXTRACTING...
+              </button>
             ) : (
               <button className="btn-capture btn-capture-active" onClick={stopCapture}>
                 <span className="stop-icon" />
@@ -404,7 +420,15 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           </div>
 
           <div className="intel-list">
-            {session.intelligence.length === 0 && (
+            {session.intelligence.length === 0 && captureState === 'extracting' && (
+              <div className="empty-state-capture extracting-state">
+                <div className="extracting-indicator">
+                  <span className="extracting-spinner" />
+                  <p>AI is extracting intelligence...</p>
+                </div>
+              </div>
+            )}
+            {session.intelligence.length === 0 && captureState !== 'extracting' && (
               <div className="empty-state-capture">
                 <p>Intelligence extractions will appear here as speech is processed</p>
               </div>

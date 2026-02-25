@@ -21,14 +21,20 @@ type CaptureState = 'idle' | 'listening' | 'extracting';
 function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
   const items: IntelligenceItem[] = [];
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-  const categorySet = new Set(categories);
+
+  // Build case-insensitive lookup: "vital signs" → "Vital Signs"
+  const categoryMap = new Map<string, string>();
+  for (const cat of categories) {
+    categoryMap.set(cat.toLowerCase(), cat);
+  }
 
   for (const line of response.split('\n')) {
     const match = line.match(/^\[([^\]]+)\]\s*(.+)/);
     if (match) {
-      const [, category, content] = match;
-      if (categorySet.has(category)) {
-        items.push({ id: crypto.randomUUID(), category, content: content.trim(), timestamp });
+      const [, rawCategory, content] = match;
+      const resolved = categoryMap.get(rawCategory.toLowerCase().trim());
+      if (resolved) {
+        items.push({ id: crypto.randomUUID(), category: resolved, content: content.trim(), timestamp });
       }
     }
   }
@@ -107,7 +113,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     };
   }, []);
 
-  // LLM extraction — serialized to prevent KV cache crash from concurrent calls
+  // LLM extraction — serialized with timeout to prevent hangs and KV cache crashes
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
     // Skip if LLM disabled or another generation is already running
     if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
@@ -115,7 +121,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
     try {
-      const { text: response } = await TextGeneration.generate(
+      const generatePromise = TextGeneration.generate(
         `Transcript:\n${text}\n\nExtract key facts only:`,
         {
           systemPrompt: domain.systemPrompt,
@@ -124,10 +130,21 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           topP: 0.9,
         },
       );
+
+      // Timeout after 30s — tiny models can hang on complex prompts
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('LLM_TIMEOUT')), 30_000),
+      );
+
+      const { text: response } = await Promise.race([generatePromise, timeoutPromise]);
       // Discard result if a newer request was queued while we were running
       if (llmGenerationIdRef.current !== myId) return [];
       return parseLLMResponse(response, domain.categories);
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'LLM_TIMEOUT') {
+        console.warn('[ShadowNotes] LLM timed out after 30s — falling back to keyword extraction');
+      }
       return [];
     } finally {
       llmBusyRef.current = false;

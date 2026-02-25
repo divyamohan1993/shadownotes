@@ -17,7 +17,7 @@ export interface PerfConfig {
 export const PERF_PRESETS: Record<string, PerfConfig> = {
   High: {
     llmEnabled: true,
-    maxTokens: 250,
+    maxTokens: 150,
     temperature: 0.3,
     extractionDebounceMs: 800,
     interimThrottleMs: 0,

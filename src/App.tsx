@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { initSDK, ModelManager, ModelCategory } from './runanywhere';
+import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
@@ -35,11 +35,16 @@ function AppInner() {
         await initSDK();
         setBootPhase(4);
 
-        // Immediately begin downloading the LLM model in the background
+        // Download the LLM model only if not already cached in OPFS
         const models = ModelManager.getModels().filter((m) => m.modality === ModelCategory.Language);
         if (models.length > 0) {
           const model = models[0];
-          if (model.status !== 'downloaded' && model.status !== 'loaded') {
+          // Check OPFS directly — model.status may not reflect cache yet
+          const opfs = new OPFSStorage();
+          const opfsOk = await opfs.initialize();
+          const cached = opfsOk && await opfs.hasModel(model.id);
+
+          if (!cached) {
             setBootPhase(5);
             setModelProgress(0);
             const unsub = EventBus.shared.on('model.downloadProgress', (evt) => {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { ModelManager, ModelCategory, EventBus } from '@runanywhere/web';
+import { ModelManager, ModelCategory, EventBus, OPFSStorage } from '@runanywhere/web';
 
 export type LoaderState = 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
 
@@ -37,7 +37,12 @@ export function useModelLoader(category: ModelCategory, coexist = false): ModelL
 
       const model = models[0];
 
-      if (model.status !== 'downloaded' && model.status !== 'loaded') {
+      // Check OPFS directly — model.status may lag behind actual cache state
+      const opfs = new OPFSStorage();
+      const opfsOk = await opfs.initialize();
+      const cached = opfsOk && await opfs.hasModel(model.id);
+
+      if (!cached && model.status !== 'downloaded' && model.status !== 'loaded') {
         setState('downloading');
         setProgress(0);
 

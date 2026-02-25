@@ -5,6 +5,7 @@ import {
   ModelCategory,
   LLMFramework,
   AccelerationPreference,
+  OPFSStorage,
   type CompactModelDef,
 } from '@runanywhere/web';
 
@@ -67,4 +68,4 @@ export function getAccelerationMode(): string | null {
   return LlamaCPP.isRegistered ? LlamaCPP.accelerationMode : null;
 }
 
-export { RunAnywhere, ModelManager, ModelCategory };
+export { RunAnywhere, ModelManager, ModelCategory, OPFSStorage };

@@ -65,4 +65,18 @@ export const VoicePipeline = vi.fn().mockImplementation(() => ({
   processTurn: vi.fn(),
 }));
 
+export const AccelerationPreference = {
+  Auto: 'auto',
+  WebGPU: 'webgpu',
+  CPU: 'cpu',
+};
+
+export class OPFSStorage {
+  initialize = vi.fn(async () => true);
+  hasModel = vi.fn(async () => false);
+  listModels = vi.fn(async () => []);
+  getFileSize = vi.fn(async () => null);
+  getStorageUsage = vi.fn(async () => ({ usedBytes: 0, quotaBytes: 0 }));
+}
+
 export type CompactModelDef = any;

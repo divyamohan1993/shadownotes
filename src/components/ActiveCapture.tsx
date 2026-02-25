@@ -58,8 +58,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   // a superset of (or identical to) the previous final, and update-in-place.
   const lastFinalTextRef = useRef('');
   const lastFinalTimeRef = useRef(0);
-  const pendingExtractionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Accumulate ALL transcript segments since last extraction so LLM gets full context
+  // Accumulate ALL transcript segments — extraction runs when user pauses capture
   const accumulatedTextRef = useRef('');
 
   // LLM model loader
@@ -105,9 +104,6 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
-      if (pendingExtractionRef.current) {
-        clearTimeout(pendingExtractionRef.current);
-      }
     };
   }, []);
 
@@ -203,9 +199,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           }
           lastFinalTimeRef.current = now;
 
-          // Accumulate text for batch extraction.
-          // On refinement the last segment was updated in-place, so replace
-          // the last accumulated segment with the longer version.
+          // Accumulate text for batch extraction (runs when user pauses capture).
           if (isRefinement) {
             const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
             parts[parts.length - 1] = lastFinalTextRef.current;
@@ -213,33 +207,6 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           } else {
             accumulatedTextRef.current += (accumulatedTextRef.current ? '\n' : '') + text;
           }
-
-          // Wait for 3 seconds of silence, then run extraction ONCE on
-          // the full accumulated transcript.
-          if (pendingExtractionRef.current) {
-            clearTimeout(pendingExtractionRef.current);
-          }
-          pendingExtractionRef.current = setTimeout(() => {
-            pendingExtractionRef.current = null;
-            const fullText = accumulatedTextRef.current;
-            accumulatedTextRef.current = '';
-            if (!fullText) return;
-            if (perfConfig.llmEnabled && llmReadyRef.current) {
-              tryLLMExtraction(fullText, session.domain).then(items => {
-                if (items.length > 0) {
-                  onAddIntelligence(items);
-                } else {
-                  const kwItems = extractIntelligence(fullText, session.domain.id);
-                  if (kwItems.length > 0) onAddIntelligence(kwItems);
-                }
-              });
-            } else {
-              const items = extractIntelligence(fullText, session.domain.id);
-              if (items.length > 0) {
-                onAddIntelligence(items);
-              }
-            }
-          }, 3000);
 
           setLiveTranscript('');
         } else {
@@ -276,21 +243,41 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction, perfConfig.llmEnabled, perfConfig.interimThrottleMs]);
+  }, [session.domain, onAddTranscript, onUpdateLastTranscript, perfConfig.interimThrottleMs]);
+
+  const runExtraction = useCallback((fullText: string) => {
+    if (!fullText) return;
+    if (perfConfig.llmEnabled && llmReadyRef.current) {
+      tryLLMExtraction(fullText, session.domain).then(items => {
+        if (items.length > 0) {
+          onAddIntelligence(items);
+        } else {
+          const kwItems = extractIntelligence(fullText, session.domain.id);
+          if (kwItems.length > 0) onAddIntelligence(kwItems);
+        }
+      });
+    } else {
+      const items = extractIntelligence(fullText, session.domain.id);
+      if (items.length > 0) {
+        onAddIntelligence(items);
+      }
+    }
+  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain, onAddIntelligence]);
 
   const stopCapture = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
-    if (pendingExtractionRef.current) {
-      clearTimeout(pendingExtractionRef.current);
-      pendingExtractionRef.current = null;
-    }
+
+    // Extract intelligence from everything said during this capture session
+    const fullText = accumulatedTextRef.current;
+    accumulatedTextRef.current = '';
+    runExtraction(fullText);
+
     lastFinalTextRef.current = '';
     lastFinalTimeRef.current = 0;
-    accumulatedTextRef.current = '';
     setCaptureState('idle');
     setLiveTranscript('');
-  }, []);
+  }, [runExtraction]);
 
   const handleEndSession = useCallback(() => {
     stopCapture();

@@ -79,7 +79,7 @@ SpeechRecognition (browser-native, continuous mode)
     v
 Intelligence Extraction (branching):
     |
-    +--- LLM Ready? --YES--> TextGeneration.generate()  <-- LFM2 350M (llama.cpp WASM, 250MB)
+    +--- LLM Ready? --YES--> TextGeneration.generate()  <-- Qwen2.5 0.5B (llama.cpp WASM, ~400MB)
     |                              |
     |                              | Parse: /^\[([^\]]+)\]\s*(.+)/
     |                              v
@@ -99,7 +99,7 @@ IntelligenceItem[] -> React State      IntelligenceItem[] -> React State
 
 ### Extraction Layers
 
-1. **RunAnywhere LLM (primary)**: LFM2 350M model processes transcript text with domain-specific system prompts. Outputs structured `[Category] finding` lines parsed by regex. Runs entirely on-device via llama.cpp WASM.
+1. **RunAnywhere LLM (primary)**: Qwen2.5 0.5B Instruct model processes transcript text with domain-specific system prompts. Outputs structured `[Category] finding` lines parsed by regex. Runs entirely on-device via llama.cpp WASM.
 
 2. **Keyword Extraction (fallback)**: Regex-based pattern matching engine in `src/extraction.ts`. Zero memory overhead, instant results. Domain-specific rules for medical, security, legal, and incident domains. Used when LLM is loading or unavailable.
 
@@ -109,9 +109,9 @@ Defined in `src/runanywhere.ts`:
 
 | Model | ID | Framework | Category | Size | Source |
 |-------|----|-----------|----------|------|--------|
-| LFM2 350M Q4_K_M | `lfm2-350m-q4_k_m` | LlamaCPP | Language | ~250MB | `LiquidAI/LFM2-350M-GGUF` (HuggingFace) |
+| Qwen2.5 0.5B Instruct Q4_K_M | `qwen2.5-0.5b-instruct-q4_k_m` | LlamaCPP | Language | ~400MB | `bartowski/Qwen2.5-0.5B-Instruct-GGUF` (HuggingFace) |
 
-Total download: ~250MB (one-time, cached in OPFS)
+Total download: ~400MB (one-time, cached in OPFS)
 
 ## Domain Profiles
 

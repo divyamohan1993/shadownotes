@@ -54,9 +54,14 @@ Object.defineProperty(window, 'SpeechRecognition', {
 });
 
 import { ActiveCapture } from '../../components/ActiveCapture';
+import { PerfProvider } from '../../perfConfig';
 import { useModelLoader } from '../../hooks/useModelLoader';
 import { DOMAINS } from '../../domains';
 import type { SessionData } from '../../types';
+
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return <PerfProvider>{children}</PerfProvider>;
+}
 
 function createSession(overrides?: Partial<SessionData>): SessionData {
   return {
@@ -103,6 +108,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText(/CASE: SN-260222-ABCD/)).toBeInTheDocument();
   });
@@ -118,6 +124,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('TOP SECRET')).toBeInTheDocument();
   });
@@ -133,6 +140,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('OPERATION FIREWALL')).toBeInTheDocument();
   });
@@ -148,6 +156,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('AI: PENDING')).toBeInTheDocument();
   });
@@ -170,6 +179,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('AI: ACTIVE')).toBeInTheDocument();
   });
@@ -192,6 +202,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('AI: KEYWORDS')).toBeInTheDocument();
   });
@@ -207,6 +218,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('RAW TRANSCRIPT')).toBeInTheDocument();
     expect(screen.getByText('INTELLIGENCE EXTRACT')).toBeInTheDocument();
@@ -223,6 +235,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('0 segments')).toBeInTheDocument();
   });
@@ -238,6 +251,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('0 findings')).toBeInTheDocument();
   });
@@ -253,6 +267,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('BEGIN CAPTURE')).toBeInTheDocument();
   });
@@ -268,6 +283,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText('Begin capture to start recording')).toBeInTheDocument();
   });
@@ -283,6 +299,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(screen.getByText(/Intelligence extractions will appear/)).toBeInTheDocument();
   });
@@ -298,6 +315,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     fireEvent.click(screen.getByText('BEGIN CAPTURE'));
@@ -319,6 +337,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     fireEvent.click(screen.getByText('BEGIN CAPTURE'));
@@ -342,6 +361,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     fireEvent.click(screen.getByText('END SESSION'));
@@ -366,6 +386,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     expect(screen.getByText('Server room entry detected')).toBeInTheDocument();
@@ -392,6 +413,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     expect(screen.getByText('Open port 22 on server')).toBeInTheDocument();
@@ -411,6 +433,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     // Timer starts at 00:00:00
     expect(screen.getByText('00:00:00')).toBeInTheDocument();
@@ -427,6 +450,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     const bars = container.querySelectorAll('.vad-bar');
     expect(bars.length).toBe(12);
@@ -447,6 +471,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
 
     fireEvent.click(screen.getByText('BEGIN CAPTURE'));
@@ -475,6 +500,7 @@ describe('ActiveCapture', () => {
         onDeleteIntelligence={mockDeleteIntelligence}
         onEndSession={mockEndSession}
       />,
+      { wrapper: Wrapper },
     );
     expect(mockEnsure).toHaveBeenCalled();
   });

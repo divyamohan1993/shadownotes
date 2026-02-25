@@ -82,24 +82,12 @@ describe('App', () => {
   it('shows boot log messages progressively', async () => {
     render(<App />);
 
-    // Phase 1 immediately
+    // All boot phases appear immediately (no artificial delays)
     await waitFor(() => {
       expect(screen.getByText(/Initializing secure environment/)).toBeInTheDocument();
+      expect(screen.getByText(/Verifying air-gap integrity/)).toBeInTheDocument();
+      expect(screen.getByText(/Loading on-device inference engine/)).toBeInTheDocument();
     });
-
-    // Advance to phase 2
-    await act(async () => {
-      vi.advanceTimersByTime(500);
-    });
-
-    expect(screen.getByText(/Verifying air-gap integrity/)).toBeInTheDocument();
-
-    // Advance to phase 3
-    await act(async () => {
-      vi.advanceTimersByTime(400);
-    });
-
-    expect(screen.getByText(/Loading on-device inference engine/)).toBeInTheDocument();
   });
 
   it('transitions to SessionInit after boot completes', async () => {

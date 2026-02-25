@@ -4,6 +4,7 @@ import {
   ModelManager,
   ModelCategory,
   LLMFramework,
+  AccelerationPreference,
   type CompactModelDef,
 } from '@runanywhere/web';
 
@@ -22,15 +23,36 @@ const MODELS: CompactModelDef[] = [
   },
 ];
 
+/** Check if the GPU supports ShaderF16 (required by the WebGPU WASM backend). */
+async function detectAcceleration(): Promise<AccelerationPreference> {
+  try {
+    const gpu = (navigator as unknown as Record<string, unknown>).gpu as
+      | { requestAdapter(): Promise<{ features: Set<string> } | null> }
+      | undefined;
+    if (!gpu) return AccelerationPreference.CPU;
+    const adapter = await gpu.requestAdapter();
+    if (!adapter || !adapter.features.has('shader-f16')) {
+      console.warn('[ShadowNotes] GPU lacks shader-f16 — falling back to CPU inference');
+      return AccelerationPreference.CPU;
+    }
+    return AccelerationPreference.Auto;
+  } catch {
+    return AccelerationPreference.CPU;
+  }
+}
+
 let _initPromise: Promise<void> | null = null;
 
 export async function initSDK(): Promise<void> {
   if (_initPromise) return _initPromise;
 
   _initPromise = (async () => {
+    const acceleration = await detectAcceleration();
+
     await RunAnywhere.initialize({
-      environment: SDKEnvironment.Development,
-      debug: true,
+      environment: SDKEnvironment.Production,
+      debug: false,
+      acceleration,
     });
 
     await LlamaCPP.register();

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SessionData, IntelligenceItem } from '../types';
 
 interface Props {
@@ -67,11 +67,11 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
     return `${m}m ${s}s`;
   };
 
-  const groupedIntel = session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
+  const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {});
+  }, {}), [session.intelligence]);
 
   if (destroying) {
     return (

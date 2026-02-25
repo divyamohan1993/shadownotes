@@ -4,10 +4,19 @@ import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
 import { SessionSummary } from './components/SessionSummary';
+import { PerfProvider, DebugPanel } from './perfConfig';
 import type { AppScreen, SessionData, DomainProfile, TranscriptEntry, IntelligenceItem } from './types';
 import { generateCaseNumber } from './domains';
 
 export function App() {
+  return (
+    <PerfProvider>
+      <AppInner />
+    </PerfProvider>
+  );
+}
+
+function AppInner() {
   const [sdkReady, setSdkReady] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
   const [screen, setScreen] = useState<AppScreen>('init');
@@ -19,9 +28,7 @@ export function App() {
   useEffect(() => {
     const bootSequence = async () => {
       setBootPhase(1);
-      await new Promise((r) => setTimeout(r, 400));
       setBootPhase(2);
-      await new Promise((r) => setTimeout(r, 300));
       setBootPhase(3);
 
       try {
@@ -46,7 +53,6 @@ export function App() {
           }
         }
 
-        await new Promise((r) => setTimeout(r, 200));
         setSdkReady(true);
       } catch (err) {
         setSdkError(err instanceof Error ? err.message : String(err));
@@ -187,6 +193,7 @@ export function App() {
       {screen === 'summary' && session && (
         <SessionSummary session={session} onUpdateIntelligence={updateIntelligence} onDeleteIntelligence={deleteIntelligence} onDestroy={destroySession} />
       )}
+      <DebugPanel />
     </div>
   );
 }

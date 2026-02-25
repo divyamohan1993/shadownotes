@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { extractIntelligence } from '../extraction';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelCategory } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
+import { usePerfConfig } from '../perfConfig';
 import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
 
 interface Props {
@@ -43,9 +44,12 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  const { config: perfConfig } = usePerfConfig();
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const lastInterimUpdateRef = useRef(0);
 
   // Track last committed transcript text for text-based deduplication.
   // The Web Speech API (especially on mobile) finalizes partial utterances on
@@ -79,7 +83,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     ensureLLM();
   }, [ensureLLM]);
 
-  // Session timer
+  // Session timer — interval controlled by perfConfig
   useEffect(() => {
     const interval = setInterval(() => {
       const diff = Date.now() - session.startTime.getTime();
@@ -87,9 +91,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
       const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
       const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
       setElapsed(`${h}:${m}:${s}`);
-    }, 1000);
+    }, perfConfig.timerUpdateMs);
     return () => clearInterval(interval);
-  }, [session.startTime]);
+  }, [session.startTime, perfConfig.timerUpdateMs]);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -108,8 +112,8 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
 
   // LLM extraction — serialized to prevent KV cache crash from concurrent calls
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
-    // Skip if another generation is already running
-    if (llmBusyRef.current) return [];
+    // Skip if LLM disabled or another generation is already running
+    if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
 
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
@@ -118,8 +122,8 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
         `Transcript:\n${text}`,
         {
           systemPrompt: domain.systemPrompt,
-          maxTokens: 250,
-          temperature: 0.3,
+          maxTokens: perfConfig.maxTokens,
+          temperature: perfConfig.temperature,
           topP: 0.9,
         },
       );
@@ -131,7 +135,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     } finally {
       llmBusyRef.current = false;
     }
-  }, []);
+  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature]);
 
   const startEdit = useCallback((item: IntelligenceItem) => {
     setEditingId(item.id);
@@ -206,7 +210,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
           pendingExtractionRef.current = setTimeout(() => {
             pendingExtractionRef.current = null;
             const finalText = lastExtractedTextRef.current;
-            if (llmReadyRef.current) {
+            if (perfConfig.llmEnabled && llmReadyRef.current) {
               tryLLMExtraction(finalText, session.domain).then(items => {
                 if (items.length > 0) {
                   onAddIntelligence(items);
@@ -221,7 +225,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
                 onAddIntelligence(items);
               }
             }
-          }, 800);
+          }, perfConfig.extractionDebounceMs);
 
           setLiveTranscript('');
         } else {
@@ -229,7 +233,11 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
         }
       }
       if (interim) {
-        setLiveTranscript(interim);
+        const now = Date.now();
+        if (perfConfig.interimThrottleMs <= 0 || now - lastInterimUpdateRef.current >= perfConfig.interimThrottleMs) {
+          lastInterimUpdateRef.current = now;
+          setLiveTranscript(interim);
+        }
       }
     };
 
@@ -254,7 +262,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction]);
+  }, [session.domain, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, tryLLMExtraction, perfConfig.extractionDebounceMs, perfConfig.llmEnabled, perfConfig.interimThrottleMs]);
 
   const stopCapture = useCallback(() => {
     recognitionRef.current?.stop();
@@ -275,15 +283,16 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     onEndSession();
   }, [stopCapture, onEndSession]);
 
-  // Group intelligence by category
-  const groupedIntel = session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
+  // Group intelligence by category (memoized — avoids recompute on every interim transcript render)
+  const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {});
+  }, {}), [session.intelligence]);
 
   // LLM status label for header
   const llmStatusLabel = (() => {
+    if (!perfConfig.llmEnabled) return 'AI: OFF';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
       case 'loading': return 'AI: LOADING';
@@ -349,7 +358,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
               </div>
             ))}
             {liveTranscript && (
-              <div className="transcript-entry transcript-live">
+              <div className={`transcript-entry ${perfConfig.animationsEnabled ? 'transcript-live' : ''}`}>
                 <span className="transcript-time">[...]</span>
                 <span className="transcript-text">{liveTranscript}</span>
               </div>
@@ -358,21 +367,23 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
 
           {/* Capture controls */}
           <div className="capture-controls">
+            {perfConfig.vadBarCount > 0 && (
             <div className="vad-indicator" data-state={captureState}>
               <div className="vad-bars">
-                {Array.from({ length: 12 }).map((_, i) => (
+                {Array.from({ length: perfConfig.vadBarCount }).map((_, i) => (
                   <div
                     key={i}
-                    className={`vad-bar ${captureState === 'listening' ? 'vad-bar-active' : ''}`}
-                    style={{ animationDelay: `${i * 0.08}s` }}
+                    className={`vad-bar ${captureState === 'listening' && perfConfig.animationsEnabled ? 'vad-bar-active' : ''}`}
+                    style={perfConfig.animationsEnabled ? { animationDelay: `${i * 0.08}s` } : undefined}
                   />
                 ))}
               </div>
             </div>
+          )}
 
             {captureState === 'idle' ? (
               <button className="btn-capture" onClick={startCapture}>
-                <span className="rec-dot" />
+                <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
                 BEGIN CAPTURE
               </button>
             ) : (

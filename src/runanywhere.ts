@@ -14,13 +14,13 @@ import { LlamaCPP } from '@runanywhere/web-llamacpp';
 // Only register the LLM — STT and VAD are handled by Web Speech API
 const MODELS: CompactModelDef[] = [
   {
-    id: 'lfm2-350m-q4_k_m',
-    name: 'LFM2 350M Q4_K_M',
-    repo: 'LiquidAI/LFM2-350M-GGUF',
-    files: ['LFM2-350M-Q4_K_M.gguf'],
+    id: 'smollm2-135m-instruct-q4_k_m',
+    name: 'SmolLM2 135M Instruct Q4_K_M',
+    repo: 'bartowski/SmolLM2-135M-Instruct-GGUF',
+    files: ['SmolLM2-135M-Instruct-Q4_K_M.gguf'],
     framework: LLMFramework.LlamaCpp,
     modality: ModelCategory.Language,
-    memoryRequirement: 250_000_000,
+    memoryRequirement: 110_000_000,
   },
 ];
 

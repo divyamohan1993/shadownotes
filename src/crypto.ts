@@ -3,7 +3,7 @@ import type { SessionContent } from './types';
 const SALT = new TextEncoder().encode('shadownotes-vault-v1');
 
 async function importAsHkdfKey(raw: Uint8Array): Promise<CryptoKey> {
-  return crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.importKey('raw', raw as unknown as ArrayBuffer, 'HKDF', false, ['deriveKey']);
 }
 
 function hkdfParams(info: string): HkdfParams {

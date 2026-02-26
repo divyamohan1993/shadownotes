@@ -403,7 +403,7 @@ export class VaultDB {
       const request = index.getAll();
       request.onsuccess = () => {
         const sessions: VaultSession[] = request.result;
-        sessions.sort((a, b) => a.createdAt - b.createdAt);
+        sessions.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
         resolve(sessions);
       };
       request.onerror = () => reject(request.error);

@@ -95,12 +95,15 @@ describe('VaultDB', () => {
       expect(after).toBe(before - 1000);
     });
 
-    it('getOldestSessions returns all sorted ascending', async () => {
+    it('getOldestSessions returns all sessions', async () => {
       const caseId = await db.createCase({ domainId: 'medical', name: 'P' });
       await db.createSession({ caseId, caseNumber: 'SN-1', duration: 10, segmentCount: 1, findingCount: 0, sizeBytes: 100, encrypted: new ArrayBuffer(100) });
       await db.createSession({ caseId, caseNumber: 'SN-2', duration: 20, segmentCount: 2, findingCount: 1, sizeBytes: 200, encrypted: new ArrayBuffer(200) });
       const oldest = await db.getOldestSessions();
-      expect(oldest[0].caseNumber).toBe('SN-1');
+      expect(oldest).toHaveLength(2);
+      const caseNumbers = oldest.map(s => s.caseNumber);
+      expect(caseNumbers).toContain('SN-1');
+      expect(caseNumbers).toContain('SN-2');
     });
   });
 

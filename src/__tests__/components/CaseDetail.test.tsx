@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { CaseDetail } from '../../components/CaseDetail';
 import { DOMAINS } from '../../domains';
 
@@ -18,10 +18,12 @@ describe('CaseDetail', () => {
     onBack: vi.fn(),
   };
 
-  it('renders case header', () => {
+  it('renders case header', async () => {
     render(<CaseDetail {...defaults} />);
-    expect(screen.getByText('John Doe')).toBeDefined();
-    expect(screen.getByText('MC-001')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeDefined();
+      expect(screen.getByText('MC-001')).toBeDefined();
+    });
   });
 
   it('shows empty sessions state', async () => {
@@ -39,8 +41,10 @@ describe('CaseDetail', () => {
     expect(screen.getByText(/2m 0s/)).toBeDefined();
   });
 
-  it('has NEW SESSION button', () => {
+  it('has NEW SESSION button', async () => {
     render(<CaseDetail {...defaults} />);
-    expect(screen.getByText(/NEW SESSION/)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/NEW SESSION/)).toBeDefined();
+    });
   });
 });

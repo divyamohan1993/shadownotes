@@ -11,9 +11,15 @@ import { VoiceCommandHelp } from './components/VoiceCommandHelp';
 import { PerfProvider, DebugPanel } from './perfConfig';
 import { VaultProvider, useVault } from './VaultContext';
 import { isPRFSupported } from './auth';
-import { parseVoiceCommand, type VoiceCommand } from './voiceCommands';
+import { type VoiceCommand } from './voiceCommands';
 import { generateCaseNumber } from './domains';
 import type { AppScreen, SessionData, SessionContent, DomainProfile, TranscriptEntry, IntelligenceItem, VaultCase, VaultSession } from './types';
+
+interface ReviewState {
+  sessionId: string;
+  content: SessionContent;
+  session: VaultSession;
+}
 
 export function App() {
   return (
@@ -38,15 +44,13 @@ function AppInner() {
   const [screen, setScreen] = useState<AppScreen>('unlock');
   const [currentDomain, setCurrentDomain] = useState<DomainProfile | null>(null);
   const [currentCase, setCurrentCase] = useState<VaultCase | null>(null);
-  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
-  const [reviewContent, setReviewContent] = useState<SessionContent | null>(null);
-  const [reviewSession, setReviewSession] = useState<VaultSession | null>(null);
+  const [review, setReview] = useState<ReviewState | null>(null);
 
   // Auth state
   const [prfSupported, setPrfSupported] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Active session state (in-memory during recording, same as before)
+  // Active session state (in-memory during recording)
   const [session, setSession] = useState<SessionData | null>(null);
 
   // Storage warning
@@ -60,11 +64,9 @@ function AppInner() {
     isPRFSupported().then(setPrfSupported);
   }, []);
 
-  // Boot sequence
+  // Boot sequence — phases 1-3 are instant (cosmetic), real async starts at SDK init
   useEffect(() => {
     const bootSequence = async () => {
-      setBootPhase(1);
-      setBootPhase(2);
       setBootPhase(3);
       try {
         await initSDK();
@@ -89,7 +91,7 @@ function AppInner() {
         setSdkReady(true);
       } catch (err) {
         setSdkError(err instanceof Error ? err.message : String(err));
-        setSdkReady(true); // Still allow app to function
+        setSdkReady(true);
       }
     };
     bootSequence();
@@ -182,7 +184,7 @@ function AppInner() {
     setScreen('capture');
   }, [currentDomain, currentCase]);
 
-  // Session data handlers (in-memory, same as before)
+  // Session data handlers (in-memory)
   const addTranscript = useCallback((entry: TranscriptEntry) => {
     setSession((prev) => prev ? { ...prev, transcripts: [...prev.transcripts, entry] } : null);
   }, []);
@@ -223,11 +225,8 @@ function AppInner() {
       intelligence: session.intelligence,
     };
     const sessionId = await vault.saveSession(currentCase.id, session.caseNumber, duration, content);
-    // Load back for review
-    setReviewSessionId(sessionId);
-    setReviewContent(content);
     const savedSession = await vault.listSessions(currentCase.id).then(ss => ss.find(s => s.id === sessionId));
-    setReviewSession(savedSession || null);
+    setReview(savedSession ? { sessionId, content, session: savedSession } : null);
     setSession(null);
     setScreen('summary');
     await refreshStorageWarning();
@@ -244,9 +243,7 @@ function AppInner() {
     if (!currentCase) return;
     try {
       const content = await vault.loadSession(currentCase.id, vaultSession.id);
-      setReviewSessionId(vaultSession.id);
-      setReviewContent(content);
-      setReviewSession(vaultSession);
+      setReview({ sessionId: vaultSession.id, content, session: vaultSession });
       setScreen('summary');
     } catch (err) {
       console.error('Failed to decrypt session:', err);
@@ -261,32 +258,30 @@ function AppInner() {
 
   // Update intelligence in a saved session (re-encrypt)
   const handleUpdateSavedIntelligence = useCallback(async (id: string, newContent: string) => {
-    if (!reviewContent || !reviewSessionId || !currentCase) return;
+    if (!review || !currentCase) return;
     const updated = {
-      ...reviewContent,
-      intelligence: reviewContent.intelligence.map(item =>
+      ...review.content,
+      intelligence: review.content.intelligence.map(item =>
         item.id === id ? { ...item, content: newContent } : item
       ),
     };
-    setReviewContent(updated);
-    await vault.updateSession(currentCase.id, reviewSessionId, updated);
-  }, [reviewContent, reviewSessionId, currentCase, vault]);
+    setReview({ ...review, content: updated });
+    await vault.updateSession(currentCase.id, review.sessionId, updated);
+  }, [review, currentCase, vault]);
 
   const handleDeleteSavedIntelligence = useCallback(async (id: string) => {
-    if (!reviewContent || !reviewSessionId || !currentCase) return;
+    if (!review || !currentCase) return;
     const updated = {
-      ...reviewContent,
-      intelligence: reviewContent.intelligence.filter(item => item.id !== id),
+      ...review.content,
+      intelligence: review.content.intelligence.filter(item => item.id !== id),
     };
-    setReviewContent(updated);
-    await vault.updateSession(currentCase.id, reviewSessionId, updated);
-  }, [reviewContent, reviewSessionId, currentCase, vault]);
+    setReview({ ...review, content: updated });
+    await vault.updateSession(currentCase.id, review.sessionId, updated);
+  }, [review, currentCase, vault]);
 
   // Back from summary to case detail
-  const handleBackFromSummary = useCallback(() => {
-    setReviewSessionId(null);
-    setReviewContent(null);
-    setReviewSession(null);
+  const clearReview = useCallback(() => {
+    setReview(null);
     setScreen('case-detail');
   }, []);
 
@@ -295,7 +290,7 @@ function AppInner() {
     switch (cmd.action) {
       case 'go-back':
         if (screen === 'capture') handleDiscardSession();
-        else if (screen === 'summary') handleBackFromSummary();
+        else if (screen === 'summary') clearReview();
         else if (screen === 'case-detail') setScreen('cases');
         else if (screen === 'cases') setScreen('init');
         break;
@@ -309,7 +304,6 @@ function AppInner() {
         }
         break;
       case 'delete-case':
-        // Requires confirm-delete follow-up (handled by UI state)
         break;
       case 'new-session':
         if (screen === 'case-detail') handleNewSession();
@@ -338,10 +332,9 @@ function AppInner() {
       case 'list-cases':
       case 'show-history':
       case 'confirm-delete':
-        // These are UI-feedback commands, no navigation action needed
         break;
     }
-  }, [screen, currentDomain, currentCase, vault, handleCreateCase, handleOpenCase, handleNewSession, handleOpenSession, handleSaveSession, handleDiscardSession, handleBackFromSummary]);
+  }, [screen, currentDomain, currentCase, vault, handleCreateCase, handleOpenCase, handleNewSession, handleOpenSession, handleSaveSession, handleDiscardSession, clearReview]);
 
   // Boot screen
   if (!sdkReady) {
@@ -447,20 +440,18 @@ function AppInner() {
         />
       )}
 
-      {screen === 'summary' && reviewContent && reviewSession && currentDomain && (
+      {screen === 'summary' && review && currentDomain && (
         <SessionSummary
           domain={currentDomain}
-          vaultSession={reviewSession}
-          content={reviewContent}
+          vaultSession={review.session}
+          content={review.content}
           onUpdateIntelligence={handleUpdateSavedIntelligence}
           onDeleteIntelligence={handleDeleteSavedIntelligence}
           onDeleteSession={async () => {
-            if (reviewSessionId) {
-              await vault.deleteSession(reviewSessionId);
-              handleBackFromSummary();
-            }
+            await vault.deleteSession(review.sessionId);
+            clearReview();
           }}
-          onBack={handleBackFromSummary}
+          onBack={clearReview}
         />
       )}
 

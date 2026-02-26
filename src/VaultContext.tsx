@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { VaultDB } from './vault';
-import { StorageManager, type StorageStatus } from './storage';
+import { StorageManager, formatSize, type StorageStatus } from './storage';
 import { deriveKeyFromBytes, deriveCaseKey, encryptContent, decryptContent, deriveKeyFromPassphrase } from './crypto';
-import { registerCredential, authenticateCredential, isPRFSupported } from './auth';
+import { registerCredential, authenticateCredential } from './auth';
 import type { VaultCase, VaultSession, DomainId, SessionContent } from './types';
 
 interface VaultContextValue {
@@ -129,15 +129,6 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const rotateIfNeeded = useCallback(async (excludeSessionId?: string) => {
     if (!storageRef.current) return 0;
     return storageRef.current.rotateIfNeeded(excludeSessionId);
-  }, []);
-
-  const formatSize = useCallback((bytes: number) => {
-    if (!storageRef.current) {
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
-    return storageRef.current.formatSize(bytes);
   }, []);
 
   const destroyVault = useCallback(async () => {

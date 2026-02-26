@@ -13,10 +13,6 @@ export async function isPRFSupported(): Promise<boolean> {
   }
 }
 
-export async function checkPRFSupport(): Promise<boolean> {
-  return isPRFSupported();
-}
-
 export async function registerCredential(): Promise<{ credentialId: string; keyMaterial: Uint8Array }> {
   const credential = await navigator.credentials.create({
     publicKey: {

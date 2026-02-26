@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CaseList } from '../../components/CaseList';
 import { DOMAINS } from '../../domains';
@@ -17,9 +17,11 @@ describe('CaseList', () => {
     storageWarning: null,
   };
 
-  it('renders domain header', () => {
+  it('renders domain header', async () => {
     render(<CaseList {...defaults} />);
-    expect(screen.getByText(/OPERATION VITALS/)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/OPERATION VITALS/)).toBeDefined();
+    });
   });
 
   it('shows empty state', async () => {
@@ -29,6 +31,7 @@ describe('CaseList', () => {
 
   it('shows create form', async () => {
     render(<CaseList {...defaults} />);
+    await screen.findByText(/No cases yet/);
     await userEvent.click(screen.getByText('+ NEW CASE'));
     expect(screen.getByPlaceholderText(/Case name/)).toBeDefined();
   });
@@ -42,8 +45,10 @@ describe('CaseList', () => {
     expect(screen.getByText('MC-001')).toBeDefined();
   });
 
-  it('shows storage warning', () => {
+  it('shows storage warning', async () => {
     render(<CaseList {...defaults} storageWarning="Storage: 38/50 MB used" />);
-    expect(screen.getByText(/38\/50 MB/)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/38\/50 MB/)).toBeDefined();
+    });
   });
 });

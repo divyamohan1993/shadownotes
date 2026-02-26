@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 
-// Mock SDK init
+// Controllable initSDK — resolves only when we tell it to
+let resolveInit: () => void;
+function createInitPromise() {
+  return new Promise<void>((resolve) => { resolveInit = resolve; });
+}
+
 vi.mock('../../runanywhere', () => ({
-  initSDK: vi.fn(async () => {}),
+  initSDK: vi.fn(() => createInitPromise()),
   ModelManager: {
     getModels: vi.fn(() => []),
   },
@@ -15,12 +20,10 @@ vi.mock('@runanywhere/web', () => ({
   EventBus: { shared: { on: vi.fn(() => () => {}) } },
 }));
 
-// Mock auth — PRF not supported so unlock screen shows passphrase
 vi.mock('../../auth', () => ({
   isPRFSupported: vi.fn(async () => false),
 }));
 
-// Mock VaultContext
 const mockVault = {
   isUnlocked: false,
   authMethod: null,
@@ -47,16 +50,10 @@ vi.mock('../../VaultContext', () => ({
   useVault: () => mockVault,
 }));
 
-// Mock child components to isolate App logic
 vi.mock('../../components/VaultUnlock', () => ({
   VaultUnlock: ({ onUnlockPassphrase }: any) => (
     <div data-testid="vault-unlock">
-      <button
-        data-testid="unlock-btn"
-        onClick={() => onUnlockPassphrase('test')}
-      >
-        Unlock
-      </button>
+      <button data-testid="unlock-btn" onClick={() => onUnlockPassphrase('test')}>Unlock</button>
     </div>
   ),
 }));
@@ -67,13 +64,9 @@ vi.mock('../../components/SessionInit', () => ({
       <button
         data-testid="start-security"
         onClick={() => onStart({
-          id: 'security',
-          name: 'Security Audit',
-          codename: 'OPERATION FIREWALL',
-          icon: '\u{1F6E1}',
-          clearanceLevel: 'TOP SECRET',
-          categories: ['Vulnerabilities'],
-          systemPrompt: 'test prompt',
+          id: 'security', name: 'Security Audit', codename: 'OPERATION FIREWALL',
+          icon: '\u{1F6E1}', clearanceLevel: 'TOP SECRET',
+          categories: ['Vulnerabilities'], systemPrompt: 'test prompt',
         })}
       >
         Start Security
@@ -84,37 +77,25 @@ vi.mock('../../components/SessionInit', () => ({
 
 vi.mock('../../components/CaseList', () => ({
   CaseList: ({ onBack }: any) => (
-    <div data-testid="case-list">
-      <button data-testid="back-to-init" onClick={onBack}>Back</button>
-    </div>
+    <div data-testid="case-list"><button data-testid="back-to-init" onClick={onBack}>Back</button></div>
   ),
 }));
 
 vi.mock('../../components/CaseDetail', () => ({
   CaseDetail: ({ onBack }: any) => (
-    <div data-testid="case-detail">
-      <button data-testid="back-to-cases" onClick={onBack}>Back</button>
-    </div>
+    <div data-testid="case-detail"><button data-testid="back-to-cases" onClick={onBack}>Back</button></div>
   ),
 }));
 
 vi.mock('../../components/ActiveCapture', () => ({
   ActiveCapture: ({ onEndSession }: any) => (
-    <div data-testid="active-capture">
-      <button data-testid="end-session" onClick={onEndSession}>
-        End Session
-      </button>
-    </div>
+    <div data-testid="active-capture"><button data-testid="end-session" onClick={onEndSession}>End Session</button></div>
   ),
 }));
 
 vi.mock('../../components/SessionSummary', () => ({
   SessionSummary: ({ onBack }: any) => (
-    <div data-testid="session-summary">
-      <button data-testid="back-to-case" onClick={onBack}>
-        Back
-      </button>
-    </div>
+    <div data-testid="session-summary"><button data-testid="back-to-case" onClick={onBack}>Back</button></div>
   ),
 }));
 
@@ -127,41 +108,36 @@ import { App } from '../../App';
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('shows boot screen on initial load', () => {
+  it('shows boot screen on initial load', async () => {
     render(<App />);
+    // Boot screen visible while initSDK is pending
     expect(screen.getByText('SHADOW NOTES')).toBeInTheDocument();
     expect(screen.getByText('ZERO-TRUST INTELLIGENCE SYSTEM')).toBeInTheDocument();
+    // Cleanup: resolve the pending init
+    await act(async () => { resolveInit(); });
   });
 
-  it('shows CLASSIFIED // EYES ONLY during boot', () => {
+  it('shows CLASSIFIED // EYES ONLY during boot', async () => {
     render(<App />);
     expect(screen.getByText('CLASSIFIED // EYES ONLY')).toBeInTheDocument();
+    await act(async () => { resolveInit(); });
   });
 
   it('shows boot log messages progressively', async () => {
     render(<App />);
-
-    // All boot phases appear immediately (no artificial delays)
-    await waitFor(() => {
-      expect(screen.getByText(/Initializing secure environment/)).toBeInTheDocument();
-      expect(screen.getByText(/Verifying air-gap integrity/)).toBeInTheDocument();
-      expect(screen.getByText(/Loading on-device inference engine/)).toBeInTheDocument();
-    });
+    // Boot phases 1-3 fire synchronously, so all 3 lines are visible
+    expect(screen.getByText(/Initializing secure environment/)).toBeInTheDocument();
+    expect(screen.getByText(/Verifying air-gap integrity/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading on-device inference engine/)).toBeInTheDocument();
+    await act(async () => { resolveInit(); });
   });
 
   it('transitions to unlock screen after boot completes', async () => {
     render(<App />);
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
+    // Resolve the boot
+    await act(async () => { resolveInit(); });
 
     await waitFor(() => {
       expect(screen.getByTestId('vault-unlock')).toBeInTheDocument();
@@ -170,17 +146,12 @@ describe('App', () => {
 
   it('navigates from unlock -> init after authentication', async () => {
     render(<App />);
-
-    // Boot completes
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
+    await act(async () => { resolveInit(); });
 
     await waitFor(() => {
       expect(screen.getByTestId('vault-unlock')).toBeInTheDocument();
     });
 
-    // Unlock vault
     await act(async () => {
       screen.getByTestId('unlock-btn').click();
     });

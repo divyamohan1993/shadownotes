@@ -25,7 +25,6 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
   const items: IntelligenceItem[] = [];
   const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
 
-  // Build case-insensitive lookup: "vital signs" → "Vital Signs"
   const categoryMap = new Map<string, string>();
   for (const cat of categories) {
     categoryMap.set(cat.toLowerCase(), cat);
@@ -64,10 +63,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lastInterimUpdateRef = useRef(0);
 
-  // Track last committed transcript text for text-based deduplication.
+  // Transcript deduplication refs
   const lastFinalTextRef = useRef('');
   const lastFinalTimeRef = useRef(0);
-  // Accumulate ALL transcript segments — extraction runs when user clicks decode
   const accumulatedTextRef = useRef('');
 
   // LLM model loader
@@ -78,21 +76,12 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const llmBusyRef = useRef(false);
   const llmGenerationIdRef = useRef(0);
 
-  // Keep refs in sync with state so callbacks can read current value
-  useEffect(() => {
-    captureStateRef.current = captureState;
-  }, [captureState]);
+  // Keep refs in sync with state
+  useEffect(() => { captureStateRef.current = captureState; }, [captureState]);
+  useEffect(() => { llmReadyRef.current = llmState === 'ready'; }, [llmState]);
+  useEffect(() => { ensureLLM(); }, [ensureLLM]);
 
-  useEffect(() => {
-    llmReadyRef.current = llmState === 'ready';
-  }, [llmState]);
-
-  // Continue/complete LLM loading on mount
-  useEffect(() => {
-    ensureLLM();
-  }, [ensureLLM]);
-
-  // Session timer — interval controlled by perfConfig
+  // Session timer
   useEffect(() => {
     const interval = setInterval(() => {
       const diff = Date.now() - session.startTime.getTime();
@@ -111,20 +100,16 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      recognitionRef.current?.abort();
-    };
+    return () => { recognitionRef.current?.abort(); };
   }, []);
 
-  // LLM extraction — serialized with timeout to prevent hangs and KV cache crashes
+  // LLM extraction — serialized with timeout
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
-    // Skip if LLM disabled or another generation is already running
     if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
 
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
     try {
-      // Build a concise prompt with inline format example for better compliance
       const catList = domain.categories.join(', ');
       const userPrompt = `Extract facts from this transcript. Use ONLY these categories: ${catList}
 
@@ -138,35 +123,39 @@ ${text}
 
 Extracted facts:`;
 
-      const generatePromise = TextGeneration.generate(
-        userPrompt,
-        {
-          systemPrompt: domain.systemPrompt,
-          maxTokens: perfConfig.maxTokens,
-          temperature: perfConfig.temperature,
-          topP: 0.9,
-        },
-      );
+      const generatePromise = TextGeneration.generate(userPrompt, {
+        systemPrompt: domain.systemPrompt,
+        maxTokens: perfConfig.maxTokens,
+        temperature: perfConfig.temperature,
+        topP: 0.9,
+      });
 
-      // Timeout after 30s — tiny models can hang on complex prompts
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('LLM_TIMEOUT')), 30_000),
       );
 
       const { text: response } = await Promise.race([generatePromise, timeoutPromise]);
-      // Discard result if a newer request was queued while we were running
       if (llmGenerationIdRef.current !== myId) return [];
       return parseLLMResponse(response, domain.categories);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '';
-      if (msg === 'LLM_TIMEOUT') {
-        console.warn('[ShadowNotes] LLM timed out after 30s — falling back to keyword extraction');
+      if (err instanceof Error && err.message === 'LLM_TIMEOUT') {
+        console.warn('[ShadowNotes] LLM timed out — falling back to keyword extraction');
       }
       return [];
     } finally {
       llmBusyRef.current = false;
     }
   }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature]);
+
+  // Shared extraction: try LLM first, fall back to keywords
+  const extractWithFallback = useCallback(async (text: string): Promise<IntelligenceItem[]> => {
+    if (!text) return [];
+    if (perfConfig.llmEnabled && llmReadyRef.current) {
+      const llmItems = await tryLLMExtraction(text, session.domain);
+      if (llmItems.length > 0) return llmItems;
+    }
+    return extractIntelligence(text, session.domain.id);
+  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain]);
 
   const startEdit = useCallback((item: IntelligenceItem) => {
     setEditingId(item.id);
@@ -211,6 +200,16 @@ Extracted facts:`;
     setManualAddValue('');
   }, []);
 
+  // Flush accumulated text and reset tracking refs
+  const flushAccumulated = useCallback(() => {
+    const text = accumulatedTextRef.current;
+    accumulatedTextRef.current = '';
+    lastFinalTextRef.current = '';
+    lastFinalTimeRef.current = 0;
+    setLiveTranscript('');
+    return text;
+  }, []);
+
   const startCapture = useCallback(() => {
     setError(null);
 
@@ -234,19 +233,18 @@ Extracted facts:`;
           const text = result[0].transcript.trim();
           if (!text) continue;
 
-          // Check for voice commands before processing as transcript
           const command = parseVoiceCommand(text);
           if (command) {
             onVoiceCommand?.(command);
-            continue; // Don't add to transcript
+            continue;
           }
 
           const now = Date.now();
           const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
           const prev = lastFinalTextRef.current;
-          const elapsed = now - lastFinalTimeRef.current;
+          const timeSinceLast = now - lastFinalTimeRef.current;
 
-          const isRefinement = prev && elapsed < 3000 && (
+          const isRefinement = prev && timeSinceLast < 3000 && (
             text.startsWith(prev) || prev.startsWith(text)
           );
 
@@ -254,21 +252,16 @@ Extracted facts:`;
             const longer = text.length >= prev.length ? text : prev;
             onUpdateLastTranscript({ text: longer, timestamp });
             lastFinalTextRef.current = longer;
+            // Update last line in accumulated text
+            const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
+            parts[parts.length - 1] = longer;
+            accumulatedTextRef.current = parts.join('\n');
           } else {
             onAddTranscript({ text, timestamp });
             lastFinalTextRef.current = text;
-          }
-          lastFinalTimeRef.current = now;
-
-          // Accumulate text for batch extraction (runs when user clicks decode)
-          if (isRefinement) {
-            const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
-            parts[parts.length - 1] = lastFinalTextRef.current;
-            accumulatedTextRef.current = parts.join('\n');
-          } else {
             accumulatedTextRef.current += (accumulatedTextRef.current ? '\n' : '') + text;
           }
-
+          lastFinalTimeRef.current = now;
           setLiveTranscript('');
         } else {
           interim += result[0].transcript;
@@ -291,94 +284,47 @@ Extracted facts:`;
 
     recognition.onend = () => {
       if (captureStateRef.current === 'listening') {
-        try {
-          recognition.start();
-        } catch {
-          // May fail if already started — safe to ignore
-        }
+        try { recognition.start(); } catch { /* safe to ignore */ }
       }
     };
 
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onUpdateLastTranscript, perfConfig.interimThrottleMs]);
+  }, [session.domain, onAddTranscript, onUpdateLastTranscript, perfConfig.interimThrottleMs, onVoiceCommand]);
 
-  const runExtraction = useCallback((fullText: string) => {
-    if (!fullText) return;
-    if (perfConfig.llmEnabled && llmReadyRef.current) {
-      setCaptureState('extracting');
-      tryLLMExtraction(fullText, session.domain).then(items => {
-        if (items.length > 0) {
-          onAddIntelligence(items);
-        } else {
-          const kwItems = extractIntelligence(fullText, session.domain.id);
-          if (kwItems.length > 0) onAddIntelligence(kwItems);
-        }
-      }).finally(() => {
-        setCaptureState('idle');
-      });
-    } else {
-      const items = extractIntelligence(fullText, session.domain.id);
-      if (items.length > 0) {
-        onAddIntelligence(items);
-      }
-    }
-  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain, onAddIntelligence]);
-
-  // DECODE INTELLIGENCE: animations-first, then extraction
+  // DECODE INTELLIGENCE: stop mic, animate, then extract
   const decodeIntelligence = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    const fullText = flushAccumulated();
 
-    const fullText = accumulatedTextRef.current;
-    accumulatedTextRef.current = '';
-    lastFinalTextRef.current = '';
-    lastFinalTimeRef.current = 0;
-    setLiveTranscript('');
-
-    // Set extracting state first — let React render the transition animation
     setCaptureState('extracting');
 
-    // Wait for animations to complete before starting resource-heavy LLM
+    // Let animation frame render before starting heavy LLM work
     requestAnimationFrame(() => {
-      setTimeout(() => {
-        if (fullText && perfConfig.llmEnabled && llmReadyRef.current) {
-          tryLLMExtraction(fullText, session.domain).then(items => {
-            if (items.length > 0) {
-              onAddIntelligence(items);
-            } else {
-              const kwItems = extractIntelligence(fullText, session.domain.id);
-              if (kwItems.length > 0) onAddIntelligence(kwItems);
-            }
-          }).finally(() => {
-            setCaptureState('idle');
-          });
-        } else if (fullText) {
-          const items = extractIntelligence(fullText, session.domain.id);
-          if (items.length > 0) onAddIntelligence(items);
-          setCaptureState('idle');
-        } else {
-          setCaptureState('idle');
-        }
-      }, 500); // 500ms for animations to settle
+      setTimeout(async () => {
+        const items = await extractWithFallback(fullText);
+        if (items.length > 0) onAddIntelligence(items);
+        setCaptureState('idle');
+      }, 500);
     });
-  }, [tryLLMExtraction, session.domain, onAddIntelligence, perfConfig.llmEnabled]);
+  }, [flushAccumulated, extractWithFallback, onAddIntelligence]);
 
   const handleEndSession = useCallback(() => {
-    // Stop capture if active
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
-    // Run extraction on remaining text before ending
-    const fullText = accumulatedTextRef.current;
-    accumulatedTextRef.current = '';
+    const fullText = flushAccumulated();
     if (fullText) {
-      runExtraction(fullText);
+      // Fire-and-forget extraction on remaining text
+      extractWithFallback(fullText).then(items => {
+        if (items.length > 0) onAddIntelligence(items);
+      });
     }
     onEndSession();
-  }, [runExtraction, onEndSession]);
+  }, [flushAccumulated, extractWithFallback, onAddIntelligence, onEndSession]);
 
   // Group intelligence by category (memoized)
   const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
@@ -387,7 +333,7 @@ Extracted facts:`;
     return acc;
   }, {}), [session.intelligence]);
 
-  // LLM status label for header
+  // LLM status label
   const llmStatusLabel = (() => {
     if (captureState === 'extracting') return 'AI: DECODING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
@@ -402,7 +348,6 @@ Extracted facts:`;
 
   return (
     <div className="capture-screen">
-      {/* Header bar */}
       <header className="capture-header">
         <div className="capture-header-left">
           <div className="stamp stamp-small">{session.domain.clearanceLevel}</div>
@@ -425,14 +370,12 @@ Extracted facts:`;
         </div>
       </header>
 
-      {/* Domain banner */}
       <div className="domain-banner">
         <span className="domain-banner-icon">{session.domain.icon}</span>
         <span className="domain-banner-name">{session.domain.codename}</span>
         <span className="domain-banner-type">{session.domain.name}</span>
       </div>
 
-      {/* Dev mode notice — shown when listening */}
       {captureState === 'listening' && (
         <div className="dev-mode-banner">
           <span className="dev-mode-icon">{'\u26A0'}</span>
@@ -442,9 +385,7 @@ Extracted facts:`;
         </div>
       )}
 
-      {/* Main split view */}
       <div className="capture-body">
-        {/* Left: Transcript panel */}
         <div className="transcript-panel">
           <div className="panel-header">
             <span className="panel-label">RAW TRANSCRIPT</span>
@@ -476,7 +417,6 @@ Extracted facts:`;
             )}
           </div>
 
-          {/* Capture controls */}
           <div className="capture-controls">
             {perfConfig.vadBarCount > 0 && (
             <div className="vad-indicator" data-state={captureState}>
@@ -511,7 +451,6 @@ Extracted facts:`;
           </div>
         </div>
 
-        {/* Right: Intelligence panel */}
         <div className="intel-panel">
           <div className="panel-header">
             <span className="panel-label">INTELLIGENCE EXTRACT</span>
@@ -528,7 +467,6 @@ Extracted facts:`;
               </div>
             )}
 
-            {/* Show ALL categories — always visible for manual add */}
             {session.domain.categories.map((cat) => {
               const items = groupedIntel[cat] || [];
               const isAdding = manualAddCategory === cat;
@@ -548,7 +486,6 @@ Extracted facts:`;
                     )}
                   </div>
 
-                  {/* Manual add input */}
                   {isAdding && (
                     <div className="intel-manual-add">
                       <input
@@ -569,7 +506,6 @@ Extracted facts:`;
                     </div>
                   )}
 
-                  {/* Existing items */}
                   {items.map((item) => (
                     <div key={item.id} className="intel-item">
                       <span className="intel-time">[{item.timestamp}]</span>
@@ -591,7 +527,6 @@ Extracted facts:`;
                     </div>
                   ))}
 
-                  {/* Empty state hint for category */}
                   {items.length === 0 && !isAdding && captureState !== 'extracting' && (
                     <div className="intel-category-hint">
                       No findings yet
@@ -604,7 +539,6 @@ Extracted facts:`;
         </div>
       </div>
 
-      {/* Error display */}
       {error && (
         <div className="capture-error">
           <span>[ERROR]</span> {error}

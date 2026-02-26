@@ -74,7 +74,7 @@ describe('SessionInit', () => {
 
   it('shows the begin button as disabled when no domain selected', () => {
     render(<SessionInit onStart={mockOnStart} />);
-    const btn = screen.getByText('BEGIN CAPTURE SESSION');
+    const btn = screen.getByText('OPEN CASE FILES');
     expect(btn).toBeDisabled();
   });
 
@@ -83,7 +83,7 @@ describe('SessionInit', () => {
     render(<SessionInit onStart={mockOnStart} />);
 
     await user.click(screen.getByText('Security Audit'));
-    const btn = screen.getByText('BEGIN CAPTURE SESSION');
+    const btn = screen.getByText('OPEN CASE FILES');
     expect(btn).not.toBeDisabled();
   });
 
@@ -92,7 +92,7 @@ describe('SessionInit', () => {
     render(<SessionInit onStart={mockOnStart} />);
 
     await user.click(screen.getByText('Security Audit'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     expect(mockOnStart).toHaveBeenCalledTimes(1);
     const calledDomain = mockOnStart.mock.calls[0][0];
@@ -111,7 +111,7 @@ describe('SessionInit', () => {
     render(<SessionInit onStart={mockOnStart} />);
 
     await user.click(screen.getByText('Medical Notes'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     expect(mockOnStart).toHaveBeenCalled();
     expect(mockOnStart.mock.calls[0][0].id).toBe('medical');
@@ -122,7 +122,7 @@ describe('SessionInit', () => {
     render(<SessionInit onStart={mockOnStart} />);
 
     await user.click(screen.getByText('Legal Deposition'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     expect(mockOnStart.mock.calls[0][0].id).toBe('legal');
   });
@@ -132,7 +132,7 @@ describe('SessionInit', () => {
     render(<SessionInit onStart={mockOnStart} />);
 
     await user.click(screen.getByText('Incident Report'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     expect(mockOnStart.mock.calls[0][0].id).toBe('incident');
   });
@@ -141,7 +141,7 @@ describe('SessionInit', () => {
     const user = userEvent.setup();
     render(<SessionInit onStart={mockOnStart} />);
 
-    const btn = screen.getByText('BEGIN CAPTURE SESSION');
+    const btn = screen.getByText('OPEN CASE FILES');
     expect(btn).toBeDisabled();
     expect(mockOnStart).not.toHaveBeenCalled();
   });

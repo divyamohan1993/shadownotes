@@ -9,6 +9,7 @@ vi.mock('../../runanywhere', () => ({
     getModels: vi.fn(() => []),
   },
   ModelCategory: { Language: 'language' },
+  OPFSStorage: vi.fn(() => ({ initialize: vi.fn(async () => false), hasModel: vi.fn(async () => false) })),
 }));
 
 vi.mock('../../hooks/useModelLoader', () => ({
@@ -35,6 +36,38 @@ vi.mock('@runanywhere/web-llamacpp', () => ({
   },
 }));
 
+// Mock auth — PRF not supported
+vi.mock('../../auth', () => ({
+  isPRFSupported: vi.fn(async () => false),
+}));
+
+// Mock VaultContext with a functional mock vault
+const mockVault = {
+  isUnlocked: false,
+  authMethod: null,
+  unlock: vi.fn(async () => {}),
+  unlockWithPassphrase: vi.fn(async () => {}),
+  listCases: vi.fn(async () => []),
+  createCase: vi.fn(async () => 'case-1'),
+  deleteCase: vi.fn(async () => {}),
+  findCase: vi.fn(async () => undefined),
+  listSessions: vi.fn(async () => []),
+  saveSession: vi.fn(async () => 'session-1'),
+  loadSession: vi.fn(async () => ({ transcripts: [], intelligence: [] })),
+  updateSession: vi.fn(async () => {}),
+  deleteSession: vi.fn(async () => {}),
+  getSessionCount: vi.fn(async () => 0),
+  getStorageStatus: vi.fn(async () => ({ level: 'ok' as const, usedBytes: 0, maxBytes: 50 * 1024 * 1024, usedPercent: 0 })),
+  rotateIfNeeded: vi.fn(async () => 0),
+  formatSize: vi.fn((b: number) => `${b} B`),
+  destroyVault: vi.fn(async () => {}),
+};
+
+vi.mock('../../VaultContext', () => ({
+  VaultProvider: ({ children }: any) => <div>{children}</div>,
+  useVault: () => mockVault,
+}));
+
 // Mock SpeechRecognition
 class MockSpeechRecognition {
   continuous = false;
@@ -59,6 +92,30 @@ Object.defineProperty(window, 'SpeechRecognition', {
 
 import { App } from '../../App';
 
+async function bootAndUnlock(user: ReturnType<typeof userEvent.setup>) {
+  // 1. Boot sequence completes
+  await act(async () => {
+    vi.advanceTimersByTime(2000);
+  });
+
+  // 2. Unlock screen — enter passphrase and unlock
+  await waitFor(() => {
+    expect(screen.getByText(/VAULT AUTHENTICATION REQUIRED/)).toBeInTheDocument();
+  });
+
+  const input = screen.getByPlaceholderText('Enter passphrase...');
+  await user.type(input, 'testpass');
+
+  await act(async () => {
+    fireEvent.click(screen.getByText('UNLOCK VAULT'));
+  });
+
+  // 3. Should now be on init screen
+  await waitFor(() => {
+    expect(screen.getByText('Security Audit')).toBeInTheDocument();
+  });
+}
+
 describe('Integration: Full Session Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,7 +126,7 @@ describe('Integration: Full Session Flow', () => {
     vi.useRealTimers();
   });
 
-  it('completes a full session: boot -> select domain -> capture screen -> end -> summary -> destroy', async () => {
+  it('boots, unlocks, and reaches domain selection', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
 
@@ -77,49 +134,29 @@ describe('Integration: Full Session Flow', () => {
     expect(screen.getByText('SHADOW NOTES')).toBeInTheDocument();
     expect(screen.getByText('CLASSIFIED // EYES ONLY')).toBeInTheDocument();
 
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
+    await bootAndUnlock(user);
 
-    // 2. Session Init screen
-    await waitFor(() => {
-      expect(screen.getByText('CLASSIFIED')).toBeInTheDocument();
-      expect(screen.getByText('Security Audit')).toBeInTheDocument();
-    });
+    // Should see all domains
+    expect(screen.getByText('Security Audit')).toBeInTheDocument();
+    expect(screen.getByText('Legal Deposition')).toBeInTheDocument();
+    expect(screen.getByText('Medical Notes')).toBeInTheDocument();
+    expect(screen.getByText('Incident Report')).toBeInTheDocument();
+  });
 
-    // 3. Select domain and begin — starts immediately
+  it('selects domain and navigates to case list', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await bootAndUnlock(user);
+
+    // Select Security Audit and click OPEN CASE FILES
     await user.click(screen.getByText('Security Audit'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
-    // 4. Active capture screen
+    // Should navigate to cases screen (mocked listCases returns [])
     await waitFor(() => {
-      expect(screen.getByText(/CASE: SN-/)).toBeInTheDocument();
-      expect(screen.getByText('TOP SECRET')).toBeInTheDocument();
       expect(screen.getByText('OPERATION FIREWALL')).toBeInTheDocument();
-      expect(screen.getByText('RAW TRANSCRIPT')).toBeInTheDocument();
-      expect(screen.getByText('INTELLIGENCE EXTRACT')).toBeInTheDocument();
-    });
-
-    // 5. End session
-    fireEvent.click(screen.getByText('END SESSION'));
-
-    // 6. Summary screen
-    await waitFor(() => {
-      expect(screen.getByText('SESSION DOSSIER')).toBeInTheDocument();
-    });
-
-    // 7. Destroy session (double click for confirm)
-    fireEvent.click(screen.getByText('DESTROY SESSION'));
-    fireEvent.click(screen.getByText('CONFIRM: DESTROY ALL SESSION DATA'));
-
-    // Wait for burn animation
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    // 8. Back to init
-    await waitFor(() => {
-      expect(screen.getByText('Security Audit')).toBeInTheDocument();
+      expect(screen.getByText(/0 case/)).toBeInTheDocument();
     });
   });
 });
@@ -134,34 +171,64 @@ describe('Integration: Domain Selection', () => {
     vi.useRealTimers();
   });
 
-  it.each([
-    ['Security Audit', 'OPERATION FIREWALL', 'TOP SECRET'],
-    ['Legal Deposition', 'OPERATION TESTIMONY', 'CONFIDENTIAL'],
-    ['Medical Notes', 'OPERATION VITALS', 'RESTRICTED'],
-    ['Incident Report', 'OPERATION CHRONICLE', 'SECRET'],
-  ])('can start a %s session', async (domainName, codename, clearance) => {
+  it('can select Security Audit domain', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<App />);
 
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
+    await bootAndUnlock(user);
+
+    await user.click(screen.getByText('Security Audit'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     await waitFor(() => {
-      expect(screen.getByText(domainName)).toBeInTheDocument();
+      expect(screen.getByText('OPERATION FIREWALL')).toBeInTheDocument();
     });
+  });
 
-    await user.click(screen.getByText(domainName));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
+  it('can select Legal Deposition domain', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await bootAndUnlock(user);
+
+    await user.click(screen.getByText('Legal Deposition'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
 
     await waitFor(() => {
-      expect(screen.getByText(codename)).toBeInTheDocument();
-      expect(screen.getByText(clearance)).toBeInTheDocument();
+      expect(screen.getByText('OPERATION TESTIMONY')).toBeInTheDocument();
+    });
+  });
+
+  it('can select Medical Notes domain', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await bootAndUnlock(user);
+
+    await user.click(screen.getByText('Medical Notes'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
+
+    await waitFor(() => {
+      expect(screen.getByText('OPERATION VITALS')).toBeInTheDocument();
+    });
+  });
+
+  it('can select Incident Report domain', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<App />);
+
+    await bootAndUnlock(user);
+
+    await user.click(screen.getByText('Incident Report'));
+    await user.click(screen.getByText('OPEN CASE FILES'));
+
+    await waitFor(() => {
+      expect(screen.getByText('OPERATION CHRONICLE')).toBeInTheDocument();
     });
   });
 });
 
-describe('Integration: Ephemeral Storage', () => {
+describe('Integration: Vault Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -171,8 +238,7 @@ describe('Integration: Ephemeral Storage', () => {
     vi.useRealTimers();
   });
 
-  it('session data is completely wiped after destroy', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  it('shows unlock screen before allowing access', async () => {
     render(<App />);
 
     await act(async () => {
@@ -180,37 +246,10 @@ describe('Integration: Ephemeral Storage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Security Audit')).toBeInTheDocument();
+      expect(screen.getByText(/VAULT AUTHENTICATION REQUIRED/)).toBeInTheDocument();
     });
 
-    // Start session
-    await user.click(screen.getByText('Security Audit'));
-    await user.click(screen.getByText('BEGIN CAPTURE SESSION'));
-
-    await waitFor(() => {
-      expect(screen.getByText(/CASE: SN-/)).toBeInTheDocument();
-    });
-
-    // End session
-    fireEvent.click(screen.getByText('END SESSION'));
-
-    await waitFor(() => {
-      expect(screen.getByText('SESSION DOSSIER')).toBeInTheDocument();
-    });
-
-    // Destroy
-    fireEvent.click(screen.getByText('DESTROY SESSION'));
-    fireEvent.click(screen.getByText('CONFIRM: DESTROY ALL SESSION DATA'));
-
-    await act(async () => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    // Back at init — no session data should exist
-    await waitFor(() => {
-      expect(screen.getByText('Security Audit')).toBeInTheDocument();
-      expect(screen.queryByText('SESSION DOSSIER')).not.toBeInTheDocument();
-      expect(screen.queryByText(/CASE: SN-/)).not.toBeInTheDocument();
-    });
+    // Should NOT show domain selection yet
+    expect(screen.queryByText('Security Audit')).not.toBeInTheDocument();
   });
 });

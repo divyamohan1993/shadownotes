@@ -85,7 +85,7 @@ export function SessionInit({ onStart }: Props) {
         onClick={handleBegin}
         disabled={!selected}
       >
-        BEGIN CAPTURE SESSION
+        OPEN CASE FILES
       </button>
 
       <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-field-manual">

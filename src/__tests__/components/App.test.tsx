@@ -8,13 +8,59 @@ vi.mock('../../runanywhere', () => ({
     getModels: vi.fn(() => []),
   },
   ModelCategory: { Language: 'language' },
+  OPFSStorage: vi.fn(() => ({ initialize: vi.fn(async () => false), hasModel: vi.fn(async () => false) })),
 }));
 
 vi.mock('@runanywhere/web', () => ({
   EventBus: { shared: { on: vi.fn(() => () => {}) } },
 }));
 
+// Mock auth — PRF not supported so unlock screen shows passphrase
+vi.mock('../../auth', () => ({
+  isPRFSupported: vi.fn(async () => false),
+}));
+
+// Mock VaultContext
+const mockVault = {
+  isUnlocked: false,
+  authMethod: null,
+  unlock: vi.fn(async () => {}),
+  unlockWithPassphrase: vi.fn(async () => {}),
+  listCases: vi.fn(async () => []),
+  createCase: vi.fn(async () => 'case-1'),
+  deleteCase: vi.fn(async () => {}),
+  findCase: vi.fn(async () => undefined),
+  listSessions: vi.fn(async () => []),
+  saveSession: vi.fn(async () => 'session-1'),
+  loadSession: vi.fn(async () => ({ transcripts: [], intelligence: [] })),
+  updateSession: vi.fn(async () => {}),
+  deleteSession: vi.fn(async () => {}),
+  getSessionCount: vi.fn(async () => 0),
+  getStorageStatus: vi.fn(async () => ({ level: 'ok' as const, usedBytes: 0, maxBytes: 50 * 1024 * 1024, usedPercent: 0 })),
+  rotateIfNeeded: vi.fn(async () => 0),
+  formatSize: vi.fn((b: number) => `${b} B`),
+  destroyVault: vi.fn(async () => {}),
+};
+
+vi.mock('../../VaultContext', () => ({
+  VaultProvider: ({ children }: any) => <div>{children}</div>,
+  useVault: () => mockVault,
+}));
+
 // Mock child components to isolate App logic
+vi.mock('../../components/VaultUnlock', () => ({
+  VaultUnlock: ({ onUnlockPassphrase }: any) => (
+    <div data-testid="vault-unlock">
+      <button
+        data-testid="unlock-btn"
+        onClick={() => onUnlockPassphrase('test')}
+      >
+        Unlock
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('../../components/SessionInit', () => ({
   SessionInit: ({ onStart }: any) => (
     <div data-testid="session-init">
@@ -36,6 +82,22 @@ vi.mock('../../components/SessionInit', () => ({
   ),
 }));
 
+vi.mock('../../components/CaseList', () => ({
+  CaseList: ({ onBack }: any) => (
+    <div data-testid="case-list">
+      <button data-testid="back-to-init" onClick={onBack}>Back</button>
+    </div>
+  ),
+}));
+
+vi.mock('../../components/CaseDetail', () => ({
+  CaseDetail: ({ onBack }: any) => (
+    <div data-testid="case-detail">
+      <button data-testid="back-to-cases" onClick={onBack}>Back</button>
+    </div>
+  ),
+}));
+
 vi.mock('../../components/ActiveCapture', () => ({
   ActiveCapture: ({ onEndSession }: any) => (
     <div data-testid="active-capture">
@@ -47,13 +109,17 @@ vi.mock('../../components/ActiveCapture', () => ({
 }));
 
 vi.mock('../../components/SessionSummary', () => ({
-  SessionSummary: ({ onDestroy }: any) => (
+  SessionSummary: ({ onBack }: any) => (
     <div data-testid="session-summary">
-      <button data-testid="destroy-session" onClick={onDestroy}>
-        Destroy
+      <button data-testid="back-to-case" onClick={onBack}>
+        Back
       </button>
     </div>
   ),
+}));
+
+vi.mock('../../components/VoiceCommandHelp', () => ({
+  VoiceCommandHelp: () => null,
 }));
 
 import { App } from '../../App';
@@ -90,20 +156,19 @@ describe('App', () => {
     });
   });
 
-  it('transitions to SessionInit after boot completes', async () => {
+  it('transitions to unlock screen after boot completes', async () => {
     render(<App />);
 
-    // Advance through boot sequence (400 + 300 + 300 + 200 = 1200ms)
     await act(async () => {
       vi.advanceTimersByTime(2000);
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('session-init')).toBeInTheDocument();
+      expect(screen.getByTestId('vault-unlock')).toBeInTheDocument();
     });
   });
 
-  it('navigates from init -> capture -> summary -> init (full lifecycle)', async () => {
+  it('navigates from unlock -> init after authentication', async () => {
     render(<App />);
 
     // Boot completes
@@ -112,28 +177,16 @@ describe('App', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByTestId('vault-unlock')).toBeInTheDocument();
+    });
+
+    // Unlock vault
+    await act(async () => {
+      screen.getByTestId('unlock-btn').click();
+    });
+
+    await waitFor(() => {
       expect(screen.getByTestId('session-init')).toBeInTheDocument();
     });
-
-    // Start a session
-    await act(async () => {
-      screen.getByTestId('start-security').click();
-    });
-
-    expect(screen.getByTestId('active-capture')).toBeInTheDocument();
-
-    // End session
-    await act(async () => {
-      screen.getByTestId('end-session').click();
-    });
-
-    expect(screen.getByTestId('session-summary')).toBeInTheDocument();
-
-    // Destroy session
-    await act(async () => {
-      screen.getByTestId('destroy-session').click();
-    });
-
-    expect(screen.getByTestId('session-init')).toBeInTheDocument();
   });
 });

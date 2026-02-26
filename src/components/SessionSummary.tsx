@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { SessionData, IntelligenceItem } from '../types';
+import type { DomainProfile, VaultSession, SessionContent, IntelligenceItem } from '../types';
 
 interface Props {
-  session: SessionData;
+  domain: DomainProfile;
+  vaultSession: VaultSession;
+  content: SessionContent;
   onUpdateIntelligence: (id: string, newContent: string) => void;
   onDeleteIntelligence: (id: string) => void;
-  onDestroy: () => void;
+  onDeleteSession: () => Promise<void>;
+  onBack: () => void;
 }
 
-export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntelligence, onDestroy }: Props) {
-  const [destroying, setDestroying] = useState(false);
-  const [confirmDestroy, setConfirmDestroy] = useState(false);
-  const [burnProgress, setBurnProgress] = useState(0);
+export function SessionSummary({ domain, vaultSession, content, onUpdateIntelligence, onDeleteIntelligence, onDeleteSession, onBack }: Props) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
@@ -33,66 +34,33 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
     setEditValue('');
   }, []);
 
-  const handleDestroy = () => {
-    if (!confirmDestroy) {
-      setConfirmDestroy(true);
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
       return;
     }
-
-    setDestroying(true);
-    // Animated burn sequence
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 2;
-      setBurnProgress(progress);
-      if (progress >= 100) {
-        clearInterval(interval);
-        setTimeout(onDestroy, 300);
-      }
-    }, 30);
+    await onDeleteSession();
   };
 
   // Reset confirm after timeout
   useEffect(() => {
-    if (confirmDestroy && !destroying) {
-      const t = setTimeout(() => setConfirmDestroy(false), 5000);
+    if (confirmDelete) {
+      const t = setTimeout(() => setConfirmDelete(false), 5000);
       return () => clearTimeout(t);
     }
-  }, [confirmDestroy, destroying]);
+  }, [confirmDelete]);
 
-  const duration = () => {
-    const diff = Date.now() - session.startTime.getTime();
-    const m = Math.floor(diff / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
     return `${m}m ${s}s`;
   };
 
-  const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
+  const groupedIntel = useMemo(() => content.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
     return acc;
-  }, {}), [session.intelligence]);
-
-  if (destroying) {
-    return (
-      <div className="destroy-screen">
-        <div className="destroy-overlay" style={{ opacity: burnProgress / 100 }} />
-        <div className="destroy-content">
-          <div className="destroy-icon">{'\u{1F525}'}</div>
-          <h2>DESTROYING SESSION DATA</h2>
-          <div className="destroy-bar">
-            <div className="destroy-fill" style={{ width: `${burnProgress}%` }} />
-          </div>
-          <p className="destroy-text">
-            {burnProgress < 30 && 'Wiping transcript buffer...'}
-            {burnProgress >= 30 && burnProgress < 60 && 'Purging intelligence extracts...'}
-            {burnProgress >= 60 && burnProgress < 90 && 'Zeroing session memory...'}
-            {burnProgress >= 90 && 'Session destroyed. No trace remains.'}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  }, {}), [content.intelligence]);
 
   return (
     <div className="summary-screen">
@@ -106,35 +74,35 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
         <div className="dossier-meta">
           <div className="dossier-meta-row">
             <span className="meta-label">CASE:</span>
-            <span className="meta-value">{session.caseNumber}</span>
+            <span className="meta-value">{vaultSession.caseNumber}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">OPERATION:</span>
-            <span className="meta-value">{session.domain.codename}</span>
+            <span className="meta-value">{domain.codename}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">DOMAIN:</span>
-            <span className="meta-value">{session.domain.name}</span>
+            <span className="meta-value">{domain.name}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">CLEARANCE:</span>
-            <span className="meta-value">{session.domain.clearanceLevel}</span>
+            <span className="meta-value">{domain.clearanceLevel}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">INITIATED:</span>
-            <span className="meta-value">{session.startTime.toISOString()}</span>
+            <span className="meta-value">{new Date(vaultSession.createdAt).toISOString()}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">DURATION:</span>
-            <span className="meta-value">{duration()}</span>
+            <span className="meta-value">{formatDuration(vaultSession.duration)}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">SEGMENTS:</span>
-            <span className="meta-value">{session.transcripts.length}</span>
+            <span className="meta-value">{content.transcripts.length}</span>
           </div>
           <div className="dossier-meta-row">
             <span className="meta-label">FINDINGS:</span>
-            <span className="meta-value">{session.intelligence.length}</span>
+            <span className="meta-value">{content.intelligence.length}</span>
           </div>
         </div>
       </div>
@@ -147,10 +115,10 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
             RAW TRANSCRIPT
           </h2>
           <div className="dossier-transcript">
-            {session.transcripts.length === 0 ? (
+            {content.transcripts.length === 0 ? (
               <p className="dossier-empty">No transcript data captured.</p>
             ) : (
-              session.transcripts.map((t, i) => (
+              content.transcripts.map((t, i) => (
                 <div key={i} className="dossier-transcript-line">
                   <span className="transcript-time">[{t.timestamp}]</span>
                   <span>{t.text}</span>
@@ -167,10 +135,10 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
             INTELLIGENCE EXTRACT
           </h2>
 
-          {session.intelligence.length === 0 ? (
+          {content.intelligence.length === 0 ? (
             <p className="dossier-empty">No intelligence extracted.</p>
           ) : (
-            session.domain.categories.map((cat) => {
+            domain.categories.map((cat) => {
               const items = groupedIntel[cat];
               if (!items || items.length === 0) return null;
               return (
@@ -204,17 +172,22 @@ export function SessionSummary({ session, onUpdateIntelligence, onDeleteIntellig
         </div>
       </div>
 
-      {/* Destroy button */}
+      {/* Footer with delete + back */}
       <div className="dossier-footer">
         <div className="dossier-warning">
-          {'\u{26A0}'} Session data exists only in browser memory. Closing this tab will permanently erase all data.
+          {'\u{26A0}'} Session data is encrypted and stored locally. Deleting is permanent.
         </div>
-        <button
-          className={`btn-destroy ${confirmDestroy ? 'btn-destroy-confirm' : ''}`}
-          onClick={handleDestroy}
-        >
-          {confirmDestroy ? 'CONFIRM: DESTROY ALL SESSION DATA' : 'DESTROY SESSION'}
-        </button>
+        <div className="dossier-footer-actions">
+          <button className="btn-back-case" onClick={onBack}>
+            BACK TO CASE
+          </button>
+          <button
+            className={`btn-destroy ${confirmDelete ? 'btn-destroy-confirm' : ''}`}
+            onClick={handleDelete}
+          >
+            {confirmDelete ? 'CONFIRM: DELETE SESSION' : 'DELETE SESSION'}
+          </button>
+        </div>
       </div>
     </div>
   );

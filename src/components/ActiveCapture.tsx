@@ -4,6 +4,7 @@ import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelCategory } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
 import { usePerfConfig } from '../perfConfig';
+import { parseVoiceCommand, type VoiceCommand } from '../voiceCommands';
 import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   onUpdateIntelligence: (id: string, newContent: string) => void;
   onDeleteIntelligence: (id: string) => void;
   onEndSession: () => void;
+  onDiscardSession?: () => void;
+  onVoiceCommand?: (cmd: VoiceCommand) => void;
 }
 
 type CaptureState = 'idle' | 'listening' | 'extracting';
@@ -42,7 +45,7 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
   return items;
 }
 
-export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onUpdateIntelligence, onDeleteIntelligence, onEndSession }: Props) {
+export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onUpdateIntelligence, onDeleteIntelligence, onEndSession, onDiscardSession, onVoiceCommand }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +234,13 @@ Extracted facts:`;
           const text = result[0].transcript.trim();
           if (!text) continue;
 
+          // Check for voice commands before processing as transcript
+          const command = parseVoiceCommand(text);
+          if (command) {
+            onVoiceCommand?.(command);
+            continue; // Don't add to transcript
+          }
+
           const now = Date.now();
           const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
           const prev = lastFinalTextRef.current;
@@ -406,6 +416,9 @@ Extracted facts:`;
             <div className={`status-dot ${captureState === 'extracting' ? 'status-extracting' : llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
+          {onDiscardSession && (
+            <button className="btn-discard" onClick={onDiscardSession}>DISCARD</button>
+          )}
           <button className="btn-end" onClick={handleEndSession}>
             END SESSION
           </button>

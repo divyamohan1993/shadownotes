@@ -30,4 +30,35 @@ export interface SessionData {
   intelligence: IntelligenceItem[];
 }
 
-export type AppScreen = 'init' | 'capture' | 'summary';
+export interface VaultCase {
+  id: string;
+  domainId: DomainId;
+  name: string;
+  shortId: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface VaultSession {
+  id: string;
+  caseId: string;
+  caseNumber: string;
+  createdAt: number;
+  duration: number;
+  segmentCount: number;
+  findingCount: number;
+  sizeBytes: number;
+  encrypted: ArrayBuffer;
+}
+
+export interface VaultMeta {
+  key: string;
+  value: string | number;
+}
+
+export interface SessionContent {
+  transcripts: TranscriptEntry[];
+  intelligence: IntelligenceItem[];
+}
+
+export type AppScreen = 'init' | 'unlock' | 'cases' | 'case-detail' | 'capture' | 'summary';

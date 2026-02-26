@@ -22,8 +22,7 @@ https://github.com/divyamohan1993/shadownotes.git
 
 ## Link to Demo Video
 
-<!-- Replace with actual YouTube URL after recording -->
-https://youtube.com/watch?v=REPLACE_WITH_ACTUAL_VIDEO_ID
+https://youtube.com/watch?v=qqV9ezvwY6U
 
 ## Project Description
 

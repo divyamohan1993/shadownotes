@@ -50,6 +50,10 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  // Manual add state
+  const [manualAddCategory, setManualAddCategory] = useState<string | null>(null);
+  const [manualAddValue, setManualAddValue] = useState('');
+
   const { config: perfConfig } = usePerfConfig();
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -58,13 +62,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const lastInterimUpdateRef = useRef(0);
 
   // Track last committed transcript text for text-based deduplication.
-  // The Web Speech API (especially on mobile) finalizes partial utterances on
-  // auto-restart, producing "I prescribed" → "I prescribed him" → etc. as
-  // separate isFinal results.  We detect these by checking if the new text is
-  // a superset of (or identical to) the previous final, and update-in-place.
   const lastFinalTextRef = useRef('');
   const lastFinalTimeRef = useRef(0);
-  // Accumulate ALL transcript segments — extraction runs when user pauses capture
+  // Accumulate ALL transcript segments — extraction runs when user clicks decode
   const accumulatedTextRef = useRef('');
 
   // LLM model loader
@@ -183,6 +183,31 @@ Extracted facts:`;
     setEditValue('');
   }, []);
 
+  // Manual add handlers
+  const startManualAdd = useCallback((category: string) => {
+    setManualAddCategory(category);
+    setManualAddValue('');
+  }, []);
+
+  const saveManualAdd = useCallback(() => {
+    if (manualAddCategory && manualAddValue.trim()) {
+      const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+      onAddIntelligence([{
+        id: crypto.randomUUID(),
+        category: manualAddCategory,
+        content: manualAddValue.trim(),
+        timestamp,
+      }]);
+    }
+    setManualAddCategory(null);
+    setManualAddValue('');
+  }, [manualAddCategory, manualAddValue, onAddIntelligence]);
+
+  const cancelManualAdd = useCallback(() => {
+    setManualAddCategory(null);
+    setManualAddValue('');
+  }, []);
+
   const startCapture = useCallback(() => {
     setError(null);
 
@@ -211,16 +236,11 @@ Extracted facts:`;
           const prev = lastFinalTextRef.current;
           const elapsed = now - lastFinalTimeRef.current;
 
-          // Detect progressive refinements: the new text starts with the
-          // previous final (or vice-versa) and arrived within 3 seconds.
-          // On mobile Chrome the recognition auto-restarts on silence,
-          // finalizing partial utterances each time.
           const isRefinement = prev && elapsed < 3000 && (
             text.startsWith(prev) || prev.startsWith(text)
           );
 
           if (isRefinement) {
-            // Take the longer version and update the last entry in place
             const longer = text.length >= prev.length ? text : prev;
             onUpdateLastTranscript({ text: longer, timestamp });
             lastFinalTextRef.current = longer;
@@ -230,7 +250,7 @@ Extracted facts:`;
           }
           lastFinalTimeRef.current = now;
 
-          // Accumulate text for batch extraction (runs when user pauses capture).
+          // Accumulate text for batch extraction (runs when user clicks decode)
           if (isRefinement) {
             const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
             parts[parts.length - 1] = lastFinalTextRef.current;
@@ -254,14 +274,12 @@ Extracted facts:`;
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // 'no-speech' and 'aborted' are normal — don't show to user
       if (event.error !== 'no-speech' && event.error !== 'aborted') {
         setError(`Speech recognition error: ${event.error}`);
       }
     };
 
     recognition.onend = () => {
-      // Auto-restart if still in listening mode (browser stops after silence)
       if (captureStateRef.current === 'listening') {
         try {
           recognition.start();
@@ -298,34 +316,61 @@ Extracted facts:`;
     }
   }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain, onAddIntelligence]);
 
-  const stopCapture = useCallback(() => {
+  // DECODE INTELLIGENCE: animations-first, then extraction
+  const decodeIntelligence = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
 
-    // Extract intelligence from everything said during this capture session
     const fullText = accumulatedTextRef.current;
     accumulatedTextRef.current = '';
-
     lastFinalTextRef.current = '';
     lastFinalTimeRef.current = 0;
     setLiveTranscript('');
 
-    // runExtraction sets 'extracting' state if LLM is used, then 'idle' when done.
-    // If no LLM or no text, go idle immediately.
-    if (fullText && perfConfig.llmEnabled && llmReadyRef.current) {
-      runExtraction(fullText);
-    } else {
-      if (fullText) runExtraction(fullText);
-      setCaptureState('idle');
-    }
-  }, [runExtraction, perfConfig.llmEnabled]);
+    // Set extracting state first — let React render the transition animation
+    setCaptureState('extracting');
+
+    // Wait for animations to complete before starting resource-heavy LLM
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (fullText && perfConfig.llmEnabled && llmReadyRef.current) {
+          tryLLMExtraction(fullText, session.domain).then(items => {
+            if (items.length > 0) {
+              onAddIntelligence(items);
+            } else {
+              const kwItems = extractIntelligence(fullText, session.domain.id);
+              if (kwItems.length > 0) onAddIntelligence(kwItems);
+            }
+          }).finally(() => {
+            setCaptureState('idle');
+          });
+        } else if (fullText) {
+          const items = extractIntelligence(fullText, session.domain.id);
+          if (items.length > 0) onAddIntelligence(items);
+          setCaptureState('idle');
+        } else {
+          setCaptureState('idle');
+        }
+      }, 500); // 500ms for animations to settle
+    });
+  }, [tryLLMExtraction, session.domain, onAddIntelligence, perfConfig.llmEnabled]);
 
   const handleEndSession = useCallback(() => {
-    stopCapture();
+    // Stop capture if active
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    // Run extraction on remaining text before ending
+    const fullText = accumulatedTextRef.current;
+    accumulatedTextRef.current = '';
+    if (fullText) {
+      runExtraction(fullText);
+    }
     onEndSession();
-  }, [stopCapture, onEndSession]);
+  }, [runExtraction, onEndSession]);
 
-  // Group intelligence by category (memoized — avoids recompute on every interim transcript render)
+  // Group intelligence by category (memoized)
   const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
     acc[item.category].push(item);
@@ -334,7 +379,7 @@ Extracted facts:`;
 
   // LLM status label for header
   const llmStatusLabel = (() => {
-    if (captureState === 'extracting') return 'AI: EXTRACTING...';
+    if (captureState === 'extracting') return 'AI: DECODING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
@@ -373,6 +418,16 @@ Extracted facts:`;
         <span className="domain-banner-name">{session.domain.codename}</span>
         <span className="domain-banner-type">{session.domain.name}</span>
       </div>
+
+      {/* Dev mode notice — shown when listening */}
+      {captureState === 'listening' && (
+        <div className="dev-mode-banner">
+          <span className="dev-mode-icon">{'\u26A0'}</span>
+          <span className="dev-mode-text">
+            Click <strong>DECODE INTELLIGENCE</strong> when ready. On production hardware with GPU, extraction runs live.
+          </span>
+        </div>
+      )}
 
       {/* Main split view */}
       <div className="capture-body">
@@ -432,12 +487,12 @@ Extracted facts:`;
             ) : captureState === 'extracting' ? (
               <button className="btn-capture btn-capture-extracting" disabled>
                 <span className="extracting-spinner" />
-                EXTRACTING...
+                DECODING...
               </button>
             ) : (
-              <button className="btn-capture btn-capture-active" onClick={stopCapture}>
-                <span className="stop-icon" />
-                PAUSE CAPTURE
+              <button className="btn-capture btn-capture-decode" onClick={decodeIntelligence}>
+                <span className="decode-icon" />
+                DECODE INTELLIGENCE
               </button>
             )}
           </div>
@@ -455,24 +510,53 @@ Extracted facts:`;
               <div className="empty-state-capture extracting-state">
                 <div className="extracting-indicator">
                   <span className="extracting-spinner" />
-                  <p>AI is extracting intelligence...</p>
+                  <p>AI is decoding intelligence...</p>
                 </div>
               </div>
             )}
-            {session.intelligence.length === 0 && captureState !== 'extracting' && (
-              <div className="empty-state-capture">
-                <p>Intelligence extractions will appear here as speech is processed</p>
-              </div>
-            )}
+
+            {/* Show ALL categories — always visible for manual add */}
             {session.domain.categories.map((cat) => {
-              const items = groupedIntel[cat];
-              if (!items || items.length === 0) return null;
+              const items = groupedIntel[cat] || [];
+              const isAdding = manualAddCategory === cat;
               return (
-                <div key={cat} className="intel-category">
+                <div key={cat} className={`intel-category ${items.length === 0 && !isAdding ? 'intel-category-empty' : ''}`}>
                   <div className="intel-category-header">
                     <span className="intel-stamp">{cat.toUpperCase()}</span>
-                    <span className="intel-category-count">{items.length}</span>
+                    <span className="intel-category-count">{items.length > 0 ? items.length : ''}</span>
+                    {!isAdding && (
+                      <button
+                        className="intel-add-btn"
+                        onClick={() => startManualAdd(cat)}
+                        title={`Add ${cat} finding`}
+                      >
+                        + ADD
+                      </button>
+                    )}
                   </div>
+
+                  {/* Manual add input */}
+                  {isAdding && (
+                    <div className="intel-manual-add">
+                      <input
+                        className="intel-add-input"
+                        placeholder={`Add ${cat.toLowerCase()} finding...`}
+                        value={manualAddValue}
+                        onChange={(e) => setManualAddValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveManualAdd(); }
+                          else if (e.key === 'Escape') cancelManualAdd();
+                        }}
+                        autoFocus
+                      />
+                      <div className="intel-add-actions">
+                        <button className="intel-add-save" onClick={saveManualAdd}>SAVE</button>
+                        <button className="intel-add-cancel" onClick={cancelManualAdd}>{'\u2715'}</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Existing items */}
                   {items.map((item) => (
                     <div key={item.id} className="intel-item">
                       <span className="intel-time">[{item.timestamp}]</span>
@@ -493,6 +577,13 @@ Extracted facts:`;
                       <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
                     </div>
                   ))}
+
+                  {/* Empty state hint for category */}
+                  {items.length === 0 && !isAdding && captureState !== 'extracting' && (
+                    <div className="intel-category-hint">
+                      No findings yet
+                    </div>
+                  )}
                 </div>
               );
             })}

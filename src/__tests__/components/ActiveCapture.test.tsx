@@ -301,7 +301,7 @@ describe('ActiveCapture', () => {
       />,
       { wrapper: Wrapper },
     );
-    expect(screen.getByText(/Intelligence extractions will appear/)).toBeInTheDocument();
+    expect(screen.getAllByText(/No findings yet/).length).toBeGreaterThan(0);
   });
 
   it('starts SpeechRecognition when BEGIN CAPTURE clicked', async () => {

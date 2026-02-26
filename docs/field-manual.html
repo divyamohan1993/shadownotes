@@ -309,15 +309,15 @@
           <div class="step-body">
             <div class="step-title">Start Speaking</div>
             <div class="step-desc">Click <strong>BEGIN CAPTURE</strong> and speak naturally. Your browser will ask for microphone permission. Speech is transcribed in real-time using the browser's built-in speech recognition.</div>
-            <div class="step-hint">Try: "Patient presents with elevated blood pressure, 160 over 95. Prescribing Telmisartan 40mg daily."</div>
+            <div class="step-hint">Try: "Patient presents with elevated blood pressure, 160 over 95. Prescribing Telmisartan 40mg daily." Then click <strong>DECODE INTELLIGENCE</strong> to extract findings.</div>
           </div>
         </div>
         <div class="step-item">
           <div class="step-number">05</div>
           <div class="step-body">
-            <div class="step-title">Watch Intelligence Appear</div>
-            <div class="step-desc">As you speak, the AI analyzes your transcript and extracts structured intelligence into the right panel, organized by category. The AI corrects speech recognition errors automatically.</div>
-            <div class="step-hint">Click any extracted finding to edit it. Click the X to remove incorrect entries.</div>
+            <div class="step-title">Decode &amp; Review Intelligence</div>
+            <div class="step-desc">Click <strong>DECODE INTELLIGENCE</strong> to trigger AI extraction. The AI analyzes your transcript and extracts structured intelligence into the right panel, organized by category. All domain categories are visible &mdash; click <strong>+ ADD</strong> on any category to manually add findings.</div>
+            <div class="step-hint">Click any extracted finding to edit it. Click the X to remove incorrect entries. On production hardware with GPU, extraction can run live.</div>
           </div>
         </div>
         <div class="step-item">
@@ -442,7 +442,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#x1F9E0;</div>
           <div class="feature-title">On-Device AI Extraction</div>
-          <div class="feature-desc">LFM2 350M LLM runs via llama.cpp WASM. Analyzes transcripts and extracts structured intelligence, correcting speech recognition errors.</div>
+          <div class="feature-desc">Qwen2.5 0.5B Instruct LLM runs via llama.cpp WASM. Analyzes transcripts and extracts structured intelligence, correcting speech recognition errors.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F4DD;</div>
@@ -483,7 +483,7 @@
           <tr><td>Framework</td><td>React 19 + TypeScript</td><td>UI rendering and state management</td></tr>
           <tr><td>Build Tool</td><td>Vite 7</td><td>Development server and production bundling</td></tr>
           <tr><td>AI SDK</td><td>RunAnywhere Web SDK</td><td>On-device model management and inference</td></tr>
-          <tr><td>LLM</td><td>LFM2 350M Q4_K_M (Liquid AI)</td><td>Intelligence extraction via llama.cpp WASM</td></tr>
+          <tr><td>LLM</td><td>Qwen2.5 0.5B Instruct Q4_K_M</td><td>Intelligence extraction via llama.cpp WASM</td></tr>
           <tr><td>STT</td><td>Web Speech API</td><td>Browser-native speech-to-text transcription</td></tr>
           <tr><td>Fallback</td><td>Keyword Extraction Engine</td><td>Instant regex-based intelligence extraction</td></tr>
           <tr><td>Offline</td><td>Service Worker (PWA)</td><td>Full offline support after first load</td></tr>
@@ -531,7 +531,7 @@
         <div class="video-corner br"></div>
         <!-- REPLACE the YouTube video ID below with your actual demo video -->
         <iframe
-          src="https://www.youtube.com/embed/REPLACE_WITH_VIDEO_ID"
+          src="https://www.youtube.com/embed/qqV9ezvwY6U"
           title="ShadowNotes Demo"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           referrerpolicy="strict-origin-when-cross-origin"

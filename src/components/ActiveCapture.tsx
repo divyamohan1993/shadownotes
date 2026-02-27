@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { extractIntelligence, getTimestamp } from '../extraction';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelCategory } from '@runanywhere/web';
@@ -97,16 +97,6 @@ try {
 
 const isElectron = !!(window as any).electronAPI?.isElectron || navigator.userAgent.includes('Electron');
 
-/** Memoized streaming output — only re-renders when streamingText changes,
- *  not when the parent ActiveCapture component re-renders for other reasons. */
-const StreamingOutput = memo(function StreamingOutput({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <div className="streaming-output" aria-label="Live AI output">
-      <pre className="streaming-text">{text}</pre>
-    </div>
-  );
-});
 
 interface Props {
   session: SessionData;
@@ -200,11 +190,6 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   // LLM model loader
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
   const llmReadyRef = useRef(false);
-
-  // Streaming LLM output for real-time extraction feedback
-  const [streamingText, setStreamingText] = useState('');
-  const streamingAccRef = useRef('');
-  const streamingRafRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Mutex for LLM generation — llama.cpp KV cache crashes on concurrent calls
   const llmBusyRef = useRef(false);
@@ -374,8 +359,6 @@ Example:
 
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
-    streamingAccRef.current = '';
-    setStreamingText('');
     try {
       const { userPrompt, systemPrompt } = await buildPrompt(text, domain);
 
@@ -392,16 +375,10 @@ Example:
         stopSequences: ['\n\n\n', '---', 'End of extraction'],
       });
 
-      // Accumulate tokens in a ref and flush to React state periodically
-      // to avoid re-rendering the entire component on every single token.
+      // Accumulate tokens silently — no UI updates during generation.
+      // Only the final parsed intelligence items are displayed.
       let accumulated = '';
       const timeoutId = setTimeout(() => streamHandle.cancel(), 60_000);
-
-      // Flush accumulated text to React state at most every 200ms
-      const flushInterval = setInterval(() => {
-        if (streamingAccRef.current !== accumulated) return;
-        setStreamingText(streamingAccRef.current);
-      }, 200);
 
       for await (const token of streamHandle.stream) {
         if (llmGenerationIdRef.current !== myId) {
@@ -409,12 +386,9 @@ Example:
           break;
         }
         accumulated += token;
-        streamingAccRef.current = accumulated;
       }
 
-      clearInterval(flushInterval);
       clearTimeout(timeoutId);
-      setStreamingText('');
 
       if (llmGenerationIdRef.current !== myId) return [];
 
@@ -470,8 +444,6 @@ Example:
       return [];
     } finally {
       llmBusyRef.current = false;
-      streamingAccRef.current = '';
-      setStreamingText('');
     }
   }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt, embeddings]);
 
@@ -1086,7 +1058,6 @@ Example:
                   <span className="extracting-spinner" />
                   <p>AI is decoding intelligence...</p>
                 </div>
-                <StreamingOutput text={streamingText} />
               </div>
             )}
 

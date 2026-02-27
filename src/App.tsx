@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
-import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
+import { initSDK, ModelManager, ModelCategory, OPFSStorage, preloadONNXModels } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
@@ -121,6 +121,7 @@ function AppInner() {
   const [sdkError, setSdkError] = useState<string | null>(null);
   const [bootPhase, setBootPhase] = useState(0);
   const [modelProgress, setModelProgress] = useState(-1);
+  const [onnxStep, setOnnxStep] = useState<string | null>(null);
 
   // Navigation state
   const [screen, setScreen] = useState<AppScreen>('unlock');
@@ -228,6 +229,12 @@ function AppInner() {
             setModelProgress(1);
           }
         }
+        // Phase 6: Preload ONNX audio models (STT, TTS, VAD) for voice features
+        setBootPhase(6);
+        await preloadONNXModels((step, done) => {
+          setOnnxStep(done ? null : step);
+        });
+
         setSdkReady(true);
       } catch (err) {
         setSdkError(err instanceof Error ? err.message : String(err));
@@ -633,6 +640,15 @@ function AppInner() {
             )}
             {bootPhase >= 4 && bootPhase < 5 && (
               <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '65%' }} aria-hidden="true" />
+            )}
+            {bootPhase >= 6 && (
+              <div className={`boot-line ${!onnxStep ? 'done' : 'active'}`}>
+                <span className="boot-prefix">[ONNX]</span>
+                {!onnxStep
+                  ? <>Audio models ready <span className="boot-check">{'\u2713'}</span></>
+                  : <>Loading audio models ({onnxStep})... <span className="boot-spinner" /></>
+                }
+              </div>
             )}
             {bootPhase >= 4 && (
               <div className="boot-line done" style={{ opacity: 0.6 }}>

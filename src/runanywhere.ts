@@ -54,8 +54,8 @@ import {
 } from '@runanywhere/web-onnx';
 
 // ── Model Registry ──────────────────────────────────────────
-// Primary LLM for intelligence extraction
 const MODELS: CompactModelDef[] = [
+  // LLM — primary intelligence extraction engine
   {
     id: 'qwen2.5-0.5b-instruct-q4_k_m',
     name: 'Qwen2.5 0.5B Instruct Q4_K_M',
@@ -64,6 +64,36 @@ const MODELS: CompactModelDef[] = [
     framework: LLMFramework.LlamaCpp,
     modality: ModelCategory.Language,
     memoryRequirement: 400_000_000,
+  },
+  // VAD — Silero Voice Activity Detection (~2.3 MB)
+  {
+    id: 'silero-vad',
+    name: 'Silero VAD',
+    repo: 'deepghs/silero-vad-onnx',
+    files: ['silero_vad.onnx'],
+    framework: LLMFramework.ONNX,
+    modality: ModelCategory.Audio,
+    memoryRequirement: 3_000_000,
+  },
+  // STT — Whisper Tiny English int8 (~103 MB)
+  {
+    id: 'whisper-tiny-en',
+    name: 'Whisper Tiny English',
+    repo: 'csukuangfj/sherpa-onnx-whisper-tiny.en',
+    files: ['tiny.en-encoder.int8.onnx', 'tiny.en-decoder.int8.onnx', 'tiny.en-tokens.txt'],
+    framework: LLMFramework.OpenAIWhisper,
+    modality: ModelCategory.SpeechRecognition,
+    memoryRequirement: 110_000_000,
+  },
+  // TTS — Piper English voice (~63 MB)
+  {
+    id: 'piper-tts-en-amy-low',
+    name: 'Piper English (Amy)',
+    repo: 'csukuangfj/vits-piper-en_US-amy-low',
+    files: ['en_US-amy-low.onnx', 'tokens.txt'],
+    framework: LLMFramework.PiperTTS,
+    modality: ModelCategory.SpeechSynthesis,
+    memoryRequirement: 70_000_000,
   },
 ];
 
@@ -199,6 +229,52 @@ export async function initSDK(): Promise<void> {
   })();
 
   return _initPromise;
+}
+
+// ── ONNX Model Preloading ────────────────────────────────────
+
+/**
+ * Preload ONNX audio models (VAD, STT, TTS) so they are ready for
+ * first use without an on-demand download pause.
+ *
+ * Uses ModelManager.ensureLoaded() which handles the full lifecycle:
+ * download from HuggingFace → store in OPFS → write to sherpa-onnx FS → load.
+ * After first preload, models are cached in OPFS and loaded instantly.
+ */
+export async function preloadONNXModels(
+  onProgress?: (step: string, done: boolean) => void,
+): Promise<void> {
+  // VAD: Silero Voice Activity Detection (~2.3 MB)
+  try {
+    onProgress?.('VAD', false);
+    await ModelManager.ensureLoaded(ModelCategory.Audio, { coexist: true });
+    onProgress?.('VAD', true);
+  } catch (err) {
+    log.warning(`VAD preload skipped: ${err}`);
+    onProgress?.('VAD', true);
+  }
+
+  // STT: Whisper Tiny English (~103 MB on first run, cached after)
+  try {
+    onProgress?.('STT', false);
+    await ModelManager.ensureLoaded(ModelCategory.SpeechRecognition, { coexist: true });
+    onProgress?.('STT', true);
+  } catch (err) {
+    log.warning(`STT preload skipped: ${err}`);
+    onProgress?.('STT', true);
+  }
+
+  // TTS: Piper English voice (~63 MB on first run, cached after)
+  try {
+    onProgress?.('TTS', false);
+    await ModelManager.ensureLoaded(ModelCategory.SpeechSynthesis, { coexist: true });
+    onProgress?.('TTS', true);
+  } catch (err) {
+    log.warning(`TTS preload skipped: ${err}`);
+    onProgress?.('TTS', true);
+  }
+
+  log.info('ONNX audio models preloaded (VAD + STT + TTS)');
 }
 
 // ── Voice Agent Factory ──────────────────────────────────────

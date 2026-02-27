@@ -2,6 +2,25 @@
 
 All notable changes to ShadowNotes are documented in this file.
 
+## [1.2.0] - 2026-02-28
+
+### Added
+
+- **ONNX Model Preloading at Boot** — All audio models (VAD, STT, TTS) are now downloaded and loaded during the boot sequence via `ModelManager.ensureLoaded()`. First run downloads ~170 MB of ONNX models from HuggingFace; subsequent launches load from OPFS cache instantly.
+- **ONNX Model Registry** — Registered 3 new `CompactModelDef` entries for Silero VAD (2.3 MB), Whisper Tiny English int8 STT (103 MB), and Piper English Amy TTS (63 MB) alongside the existing LLM model.
+- **Boot Screen ONNX Phase** — Phase 6 in boot sequence shows per-model loading progress (VAD → STT → TTS) with spinner/checkmark indicators.
+
+### Changed
+
+- **`preloadONNXModels()` rewritten** — Replaced direct `VAD.init()` / `STT.loadModel()` / `TTS.loadVoice()` calls (which required manual config) with `ModelManager.ensureLoaded(category)`. The SDK's ONNXProvider loaders now handle all sherpa-onnx FS operations, archive extraction, and config creation automatically.
+
+### Fixed
+
+- **CORS / CSP for HuggingFace CDN** — Added `https://*.hf.co` to CSP `connect-src` in `vercel.json` for XetHub CDN compatibility.
+- **Google Fonts COEP** — Added `crossorigin` attribute to font `<link>` tags in `index.html` and `docs/field-manual.html` for COEP `credentialless` compatibility.
+
+---
+
 ## [1.1.0] - 2026-02-27
 
 ### Added

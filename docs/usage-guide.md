@@ -7,7 +7,7 @@
 | **Node.js** | Version 18 or higher ([download](https://nodejs.org)) |
 | **Browser** | Chrome 96+ or Edge 96+ (required for WebAssembly SIMD + SharedArrayBuffer) |
 | **Microphone** | Any working microphone for voice capture |
-| **Disk Space** | ~250MB for LLM model download (one-time, cached) |
+| **Disk Space** | ~400MB for LLM model download (one-time, cached in OPFS) |
 | **RAM** | 2GB+ free (for WASM model inference) |
 
 The app runs identically on **Windows**, **macOS**, and **Linux**. No platform-specific setup required.
@@ -61,7 +61,7 @@ When you first open ShadowNotes, you'll see a classified-style boot sequence:
 [AI]  Loading on-device inference engine...      ✓
 ```
 
-This initializes the RunAnywhere SDK and registers AI model backends. It takes 1-2 seconds.
+This initializes the RunAnywhere SDK, registers the LLM model backend, and prepares the streaming extraction pipeline. It takes 1-2 seconds.
 
 ### Step 2: Select Your Domain
 
@@ -74,9 +74,13 @@ You'll see four domain cards. Select the one that matches your use case:
 | **Medical Notes** | Clinical dictation, patient encounters | Symptoms, Diagnoses, Medications, Vital Signs, Follow-up Actions |
 | **Incident Report** | Accident reports, security incidents | Incident Timeline, Witnesses, Damage Assessment, Root Cause, Next Steps |
 
+### Step 2b: Unlock Vault
+
+Before starting a session, you'll authenticate via WebAuthn biometrics (Windows Hello / Touch ID) or a passphrase. This derives the encryption key used to protect your session data at rest.
+
 ### Step 3: Begin Session
 
-Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (LFM2 350M, ~250MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
+Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (Qwen2.5 0.5B Instruct, ~400MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
 
 A progress bar shows download status. The model is cached in your browser's private filesystem (OPFS), so subsequent sessions skip the download.
 
@@ -96,8 +100,9 @@ After models load, you enter the capture screen:
 3. The 12-bar audio visualizer shows capture state
 4. When you finish a phrase, the segment is automatically:
    - Transcribed by the browser's speech engine (real-time)
-   - Analyzed by the on-device LLM or keyword extraction for intelligence
-5. Results appear in both panels immediately
+   - Analyzed by the streaming on-device LLM (`TextGeneration.generateStream()`) — tokens appear in real-time in the intelligence panel
+   - If the LLM is still loading, keyword extraction provides instant fallback results
+5. Streaming LLM output appears token-by-token with a cursor blink animation. Results are validated via `StructuredOutput.extractJson()` and grouped by category
 6. Click **"PAUSE CAPTURE"** to temporarily stop recording
 
 #### Intelligence Categories
@@ -131,8 +136,11 @@ The dossier view presents a complete summary:
 - **Raw Transcript**: Complete chronological transcript of all speech segments
 - **Intelligence Extract**: All findings grouped by category
 
-### Step 7: Destroy Session
+### Step 7: Save or Destroy
 
+**Save to Vault**: Sessions are auto-saved with debounced encryption (AES-256-GCM) to your encrypted vault. You can return to previous sessions from the Case List.
+
+**Destroy Session**:
 1. Click **"DESTROY SESSION"** — the button changes to **"CONFIRM: DESTROY ALL SESSION DATA"**
 2. Click again within 5 seconds to confirm (auto-resets after timeout)
 3. A cinematic burn animation plays:
@@ -141,6 +149,13 @@ The dossier view presents a complete summary:
    - "Zeroing session memory..."
    - "Session destroyed. No trace remains."
 4. You return to the domain selection screen. All data is permanently gone.
+
+### Voice Commands
+
+Say **"Hey Shadow"** followed by a command:
+- "Hey Shadow, delete case [name]" — Delete a case (with fuzzy matching)
+- "Hey Shadow, open case [name]" — Open a specific case
+- "Hey Shadow, new case" — Create a new case
 
 ---
 
@@ -170,12 +185,13 @@ Return to the session init screen and re-download models. This can happen if OPF
 
 ### Models fail to download
 - Check internet connection (only needed for first download)
-- Ensure sufficient disk space (~250MB)
+- Ensure sufficient disk space (~400MB)
 - Try clearing browser site data and re-downloading
 
 ### Slow transcription or extraction
 - Close other browser tabs to free memory
-- LFM2 350M runs on CPU via WASM — larger transcripts take longer to analyze
+- Qwen2.5 0.5B Instruct runs on CPU via WASM — larger transcripts take longer to analyze
+- If your device has WebGPU support, the SDK will auto-detect and use GPU acceleration
 - Ensure your device has 2GB+ free RAM
 
 ---
@@ -183,14 +199,19 @@ Return to the session init screen and re-download models. This can happen if OPF
 ## Running Tests
 
 ```bash
-npx vitest run        # Run all 162 tests
+npx vitest run        # Run all 227 tests
 npm run test:watch    # Watch mode (re-runs on file changes)
 npm run test:coverage # Generate coverage report
 ```
 
-Test suite includes:
-- 60 unit tests (domain profiles, case number generation)
-- 20 extraction tests (keyword-based intelligence extraction)
+Test suite includes 227 tests across 17 files:
+- 61 domain tests (profiles, case number generation, system prompts)
+- 21 extraction tests (keyword-based intelligence extraction)
 - 11 hook tests (model loader state machine)
-- 65 component tests (all UI components)
-- 6 integration tests (full session lifecycle)
+- 69 component tests (all 10 UI components including vault, case management)
+- 15 vault tests (encryption, key derivation, CRUD)
+- 8 storage tests (IndexedDB operations)
+- 5 crypto tests (AES-256-GCM, HKDF, PBKDF2)
+- 16 voice command tests (parsing, fuzzy matching)
+- 7 integration tests (full session lifecycle across domains)
+- 1 auth test (WebAuthn availability)

@@ -9,9 +9,14 @@ import {
   type CompactModelDef,
 } from '@runanywhere/web';
 
-import { LlamaCPP } from '@runanywhere/web-llamacpp';
+import {
+  LlamaCPP,
+  TextGeneration,
+  StructuredOutput,
+} from '@runanywhere/web-llamacpp';
 
-// Only register the LLM — STT and VAD are handled by Web Speech API
+// ── Model Registry ──────────────────────────────────────────
+// Primary LLM for intelligence extraction
 const MODELS: CompactModelDef[] = [
   {
     id: 'qwen2.5-0.5b-instruct-q4_k_m',
@@ -107,8 +112,9 @@ export async function initSDK(): Promise<void> {
   return _initPromise;
 }
 
-export function getAccelerationMode(): string | null {
-  return LlamaCPP.isRegistered ? LlamaCPP.accelerationMode : null;
-}
-
+// ── SDK Capability Exports ──────────────────────────────────
+// Core infrastructure
 export { RunAnywhere, ModelManager, ModelCategory, OPFSStorage };
+
+// LLM capabilities (llama.cpp WASM)
+export { LlamaCPP, TextGeneration, StructuredOutput };

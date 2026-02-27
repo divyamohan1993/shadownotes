@@ -25,7 +25,13 @@ export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDelete
     setCases(list);
   }, [listCases]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    listCases().then((list) => {
+      if (!cancelled) setCases(list);
+    });
+    return () => { cancelled = true; };
+  }, [listCases]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;

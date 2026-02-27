@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type MutableRefObject } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
@@ -110,9 +110,9 @@ function AppInner() {
     try {
       const saved = localStorage.getItem('shadownotes-autolock');
       return saved ? parseInt(saved, 10) : 300_000;
-    } catch { return 300_000; }
+    } catch (e) { console.warn('localStorage unavailable:', e); return 300_000; }
   });
-  const lastActivityRef = useRef(Date.now());
+  const lastActivityRef = useRef<number | null>(null);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check PRF support on mount
@@ -145,7 +145,7 @@ function AppInner() {
 
   // Persist auto-lock setting
   useEffect(() => {
-    try { localStorage.setItem('shadownotes-autolock', String(autoLockMs)); } catch {}
+    try { localStorage.setItem('shadownotes-autolock', String(autoLockMs)); } catch (e) { console.warn('localStorage unavailable:', e); }
   }, [autoLockMs]);
 
   // Boot sequence — phases 1-3 are instant (cosmetic), real async starts at SDK init
@@ -264,7 +264,7 @@ function AppInner() {
       if (priorItems.length > 0) {
         priorContext = buildPriorContextString(priorItems);
       }
-    } catch { /* first session or decryption issue — proceed without context */ }
+    } catch (e) { console.warn('Failed to load prior context:', e); }
     setSession({
       domain: currentDomain,
       caseNumber: generateCaseNumber(),
@@ -420,7 +420,8 @@ function AppInner() {
       const content = await vault.loadSession(result.case.id, result.session.id);
       setReview({ sessionId: result.session.id, content, session: result.session });
       setScreen('summary');
-    } catch {
+    } catch (e) {
+      console.warn('Failed to load session for search result:', e);
       setScreen('case-detail');
     }
     setShowSearch(false);
@@ -498,7 +499,7 @@ function AppInner() {
         }
         break;
     }
-  }, [screen, currentDomain, currentCase, vault, handleCreateCase, handleOpenCase, handleNewSession, handleOpenSession, handleSaveSession, handleDiscardSession, clearReview]);
+  }, [screen, currentDomain, currentCase, vault, handleCreateCase, handleOpenCase, handleNewSession, handleOpenSession, handleSaveSession, handleDiscardSession, clearReview, pendingVoiceDelete, refreshStorageWarning]);
 
   // Keyboard shortcuts
   useEffect(() => {

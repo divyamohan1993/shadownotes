@@ -286,7 +286,7 @@
           <div class="step-number">01</div>
           <div class="step-body">
             <div class="step-title">Access the Application</div>
-            <div class="step-desc">Navigate to <a href="https://shadownotes.dmj.one" target="_blank" rel="noopener">shadownotes.dmj.one</a>. The boot sequence initializes the secure environment and downloads the on-device AI engine (~250 MB, one-time).</div>
+            <div class="step-desc">Navigate to <a href="https://shadownotes.dmj.one" target="_blank" rel="noopener">shadownotes.dmj.one</a>. The boot sequence initializes the secure environment, registers the LLM model backend, and downloads the on-device AI engine (~400 MB, one-time).</div>
             <div class="step-hint">First load takes 1-3 minutes depending on connection. After that, the app works fully offline.</div>
           </div>
         </div>
@@ -308,7 +308,7 @@
           <div class="step-number">04</div>
           <div class="step-body">
             <div class="step-title">Start Speaking</div>
-            <div class="step-desc">Click <strong>BEGIN CAPTURE</strong> and speak naturally. Your browser will ask for microphone permission. Speech is transcribed in real-time using the browser's built-in speech recognition.</div>
+            <div class="step-desc">Click <strong>BEGIN CAPTURE</strong> and speak naturally. Your browser will ask for microphone permission. Speech is transcribed in real-time using the browser's built-in speech recognition. The streaming LLM extracts intelligence token-by-token as you speak.</div>
             <div class="step-hint">Try: "Patient presents with elevated blood pressure, 160 over 95. Prescribing Telmisartan 40mg daily." Then click <strong>DECODE INTELLIGENCE</strong> to extract findings.</div>
           </div>
         </div>
@@ -316,7 +316,7 @@
           <div class="step-number">05</div>
           <div class="step-body">
             <div class="step-title">Decode &amp; Review Intelligence</div>
-            <div class="step-desc">Click <strong>DECODE INTELLIGENCE</strong> to trigger AI extraction. The AI analyzes your transcript and extracts structured intelligence into the right panel, organized by category. All domain categories are visible &mdash; click <strong>+ ADD</strong> on any category to manually add findings.</div>
+            <div class="step-desc">Click <strong>DECODE INTELLIGENCE</strong> to trigger AI extraction. The streaming LLM (<code>TextGeneration.generateStream()</code>) processes your transcript token-by-token, showing results in real-time. <code>StructuredOutput.extractJson()</code> validates the extraction format. All domain categories are visible &mdash; click <strong>+ ADD</strong> on any category to manually add findings.</div>
             <div class="step-hint">Click any extracted finding to edit it. Click the X to remove incorrect entries. On production hardware with GPU, extraction can run live.</div>
           </div>
         </div>
@@ -331,7 +331,7 @@
           <div class="step-number">07</div>
           <div class="step-body">
             <div class="step-title">Destroy All Data</div>
-            <div class="step-desc">Click <strong>DESTROY SESSION</strong> and confirm. A cinematic burn animation plays as all data is wiped from browser memory. Zero trace remains. No data was ever stored on disk or sent to any server.</div>
+            <div class="step-desc">Click <strong>DESTROY SESSION</strong> and confirm. A cinematic burn animation plays as all data is wiped from browser memory and encrypted vault. Zero trace remains.</div>
           </div>
         </div>
       </div>
@@ -404,7 +404,7 @@
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
-          <span class="test-desc"><strong>AI model download:</strong> Wait for the boot screen to show the green checkmarks. The 250 MB model downloads once and is cached in the browser's private filesystem (OPFS).</span>
+          <span class="test-desc"><strong>AI model download:</strong> Wait for the boot screen to show the green checkmarks. The ~400 MB model (Qwen2.5 0.5B Instruct) downloads once and is cached in the browser's private filesystem (OPFS).</span>
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
@@ -416,7 +416,7 @@
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
-          <span class="test-desc"><strong>Data destruction:</strong> After destroying a session, check DevTools Application tab &mdash; no localStorage, no sessionStorage, no IndexedDB entries (except OPFS model cache which is the AI weight file).</span>
+          <span class="test-desc"><strong>Data destruction:</strong> After destroying a session, check DevTools Application tab &mdash; the encrypted vault entry for that case is removed. OPFS model cache (AI weight file) remains for reuse.</span>
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
@@ -441,8 +441,8 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F9E0;</div>
-          <div class="feature-title">On-Device AI Extraction</div>
-          <div class="feature-desc">Qwen2.5 0.5B Instruct LLM runs via llama.cpp WASM. Analyzes transcripts and extracts structured intelligence, correcting speech recognition errors.</div>
+          <div class="feature-title">Streaming AI Extraction</div>
+          <div class="feature-desc">Qwen2.5 0.5B Instruct LLM streams tokens in real-time via <code>TextGeneration.generateStream()</code>. <code>StructuredOutput.extractJson()</code> validates extraction format. Advanced sampling with <code>topK</code>, <code>topP</code>, <code>temperature</code>, and <code>stopSequences</code>.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F4DD;</div>
@@ -451,18 +451,23 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F512;</div>
-          <div class="feature-title">Zero-Trust Architecture</div>
-          <div class="feature-desc">All data in browser memory only. No localStorage, no cookies, no server calls. Tab close = total wipe.</div>
+          <div class="feature-title">Encrypted Vault</div>
+          <div class="feature-desc">AES-256-GCM encryption with per-case HKDF-derived keys. WebAuthn biometric auth (Windows Hello / Touch ID). Encrypted export/import via .shadow files.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x270F;</div>
           <div class="feature-title">Editable Findings</div>
-          <div class="feature-desc">Click any AI-extracted finding to correct it inline. Remove incorrect entries with one click. You are always in control.</div>
+          <div class="feature-desc">Click any AI-extracted finding to correct it inline. Remove incorrect entries with one click. Voice commands: "Hey Shadow, delete case..."</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F525;</div>
           <div class="feature-title">Session Destruction</div>
-          <div class="feature-desc">Animated data destruction with phase-by-phase memory wipe. Zero trace remains after session destroy.</div>
+          <div class="feature-desc">Animated data destruction with phase-by-phase memory wipe. Encrypted vault entry removed. Zero trace remains.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x2699;</div>
+          <div class="feature-title">Deep SDK Integration</div>
+          <div class="feature-desc">RunAnywhere SDK: ModelManager, EventBus, OPFSStorage, TextGeneration, StructuredOutput, LlamaCPP framework &mdash; 8 genuinely load-bearing features across 2 packages.</div>
         </div>
       </div>
     </section>
@@ -480,14 +485,17 @@
           <tr><th>Component</th><th>Technology</th><th>Purpose</th></tr>
         </thead>
         <tbody>
-          <tr><td>Framework</td><td>React 19 + TypeScript</td><td>UI rendering and state management</td></tr>
-          <tr><td>Build Tool</td><td>Vite 7</td><td>Development server and production bundling</td></tr>
-          <tr><td>AI SDK</td><td>RunAnywhere Web SDK</td><td>On-device model management and inference</td></tr>
-          <tr><td>LLM</td><td>Qwen2.5 0.5B Instruct Q4_K_M</td><td>Intelligence extraction via llama.cpp WASM</td></tr>
+          <tr><td>Framework</td><td>React 19 + TypeScript (strict)</td><td>UI rendering and state management</td></tr>
+          <tr><td>Build Tool</td><td>Vite 7 + ESLint</td><td>Development server, bundling, code quality</td></tr>
+          <tr><td>AI SDK (core)</td><td>@runanywhere/web</td><td>ModelManager, EventBus, OPFSStorage</td></tr>
+          <tr><td>AI SDK (LLM)</td><td>@runanywhere/web-llamacpp</td><td>Streaming LLM, StructuredOutput, advanced sampling</td></tr>
+          <tr><td>LLM Model</td><td>Qwen2.5 0.5B Instruct Q4_K_M</td><td>Streaming extraction via llama.cpp WASM</td></tr>
           <tr><td>STT</td><td>Web Speech API</td><td>Browser-native speech-to-text transcription</td></tr>
+          <tr><td>Encryption</td><td>AES-256-GCM + HKDF + PBKDF2</td><td>Per-case encryption for vault storage</td></tr>
+          <tr><td>Auth</td><td>WebAuthn + PRF extension</td><td>Biometric authentication + key derivation</td></tr>
           <tr><td>Fallback</td><td>Keyword Extraction Engine</td><td>Instant regex-based intelligence extraction</td></tr>
           <tr><td>Offline</td><td>Service Worker (PWA)</td><td>Full offline support after first load</td></tr>
-          <tr><td>Testing</td><td>Vitest + Testing Library</td><td>162+ tests (unit, component, integration)</td></tr>
+          <tr><td>Testing</td><td>Vitest + Testing Library</td><td>227 tests across 17 files</td></tr>
         </tbody>
       </table>
     </section>

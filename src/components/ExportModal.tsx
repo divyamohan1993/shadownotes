@@ -88,7 +88,7 @@ export function ExportModal({ mode, caseId, exportCase, importDossier, onClose }
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                mode === 'export' ? handleExport() : handleImport();
+                if (mode === 'export') { handleExport(); } else { handleImport(); }
               }
               if (e.key === 'Escape') onClose();
             }}

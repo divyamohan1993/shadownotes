@@ -110,10 +110,10 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
   }, [vaultSession, domain, content, groupedIntel]);
 
   return (
-    <div className="summary-screen">
+    <div className="summary-screen" role="main" aria-label="Session dossier summary">
       {/* Dossier header */}
       <div className="dossier-header">
-        <div className="dossier-stamps">
+        <div className="dossier-stamps" aria-hidden="true">
           <div className="stamp stamp-classified">CLASSIFIED</div>
           <div className="stamp stamp-eyes-only">EYES ONLY</div>
         </div>
@@ -227,7 +227,7 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
                       >
                         {copiedId === item.id ? 'COPIED' : 'COPY'}
                       </button>
-                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
+                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding" aria-label={`Delete finding: ${item.content.substring(0, 30)}`}>{'\u2715'}</button>
                     </div>
                   ))}
                 </div>

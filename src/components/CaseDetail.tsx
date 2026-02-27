@@ -24,7 +24,13 @@ export function CaseDetail({ domain, caseItem, listSessions, onNewSession, onOpe
     setSessions(list);
   }, [listSessions, caseItem.id]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    let cancelled = false;
+    listSessions(caseItem.id).then((list) => {
+      if (!cancelled) setSessions(list);
+    });
+    return () => { cancelled = true; };
+  }, [listSessions, caseItem.id]);
 
   const handleDeleteSession = async (id: string) => {
     if (confirmDeleteSession !== id) {

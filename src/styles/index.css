@@ -22,7 +22,7 @@
   --green-secure: #27ae60;
   --green-glow: rgba(39, 174, 96, 0.3);
   --blue-offline: #3b82f6;
-  --text-muted: #6b7280;
+  --text-muted: #9ca3af;
   --text-primary: #e5e7eb;
   --text-dim: #4b5563;
   --border-color: #1f2937;
@@ -1348,6 +1348,7 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-direction: column;
 }
 
 .extracting-indicator {
@@ -1365,6 +1366,38 @@ input:focus, textarea:focus, select:focus {
   width: 20px;
   height: 20px;
   border-width: 2px;
+}
+
+/* Streaming LLM output — live token display */
+.streaming-output {
+  width: 100%;
+  max-width: 480px;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--accent-amber-dim);
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.streaming-text {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--accent-amber);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  opacity: 0.9;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.streaming-text::after {
+  content: '\2588';
+  animation: cursorBlink 0.6s steps(1) infinite;
+  margin-left: 1px;
 }
 
 /* Processing status text */
@@ -3850,4 +3883,100 @@ input:focus, textarea:focus, select:focus {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+
+/* ============================================================
+   MOBILE TOUCH TARGET IMPROVEMENTS
+   ============================================================ */
+@media (max-width: 768px) {
+  /* Ensure minimum 44px touch targets on mobile */
+  .btn-end,
+  .btn-capture,
+  .btn-voice-help,
+  .btn-discard,
+  .intel-delete-btn,
+  .intel-add-btn,
+  .btn-copy,
+  .capture-mode-btn,
+  .btn-init-action {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .btn-end {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .btn-voice-help {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  .intel-delete-btn {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    font-size: 0.7rem;
+  }
+
+  .text-input-area {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+}
+
+@media (max-width: 480px) {
+  .capture-header-right {
+    gap: 0.25rem;
+  }
+
+  .dossier-footer-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dossier-footer-actions button {
+    width: 100%;
+  }
+
+  .btn-capture {
+    width: 100%;
+    max-width: none;
+  }
+
+  .init-actions-row {
+    flex-direction: column;
+    width: 100%;
+    max-width: 280px;
+  }
+
+  .btn-init-action {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ============================================================
+   HIGH CONTRAST MODE
+   ============================================================ */
+@media (forced-colors: active) {
+  .stamp {
+    border: 2px solid CanvasText;
+    color: CanvasText;
+  }
+
+  .status-dot {
+    background: Highlight;
+  }
+
+  .btn-begin {
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .domain-card.selected {
+    border: 3px solid Highlight;
+  }
 }

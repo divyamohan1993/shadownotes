@@ -80,6 +80,8 @@ describe('VaultDB', () => {
     it('lists sessions for a case newest first', async () => {
       const caseId = await db.createCase({ domainId: 'medical', name: 'P' });
       await db.createSession({ caseId, caseNumber: 'SN-1', duration: 10, segmentCount: 1, findingCount: 0, sizeBytes: 100, encrypted: new ArrayBuffer(100) });
+      // Ensure distinct createdAt timestamps for deterministic sort order
+      await new Promise(r => setTimeout(r, 15));
       await db.createSession({ caseId, caseNumber: 'SN-2', duration: 20, segmentCount: 2, findingCount: 1, sizeBytes: 200, encrypted: new ArrayBuffer(200) });
       const sessions = await db.listSessions(caseId);
       expect(sessions).toHaveLength(2);

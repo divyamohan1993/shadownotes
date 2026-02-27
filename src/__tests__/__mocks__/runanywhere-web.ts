@@ -80,3 +80,4 @@ export class OPFSStorage {
 }
 
 export type CompactModelDef = any;
+export type ToolDefinition = any;

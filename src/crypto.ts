@@ -1,6 +1,19 @@
 import type { SessionContent } from './types';
 
-const SALT = new TextEncoder().encode('shadownotes-vault-v1');
+/** HKDF salt — used with per-case `info` parameter, so same salt is fine here. */
+const HKDF_SALT = new TextEncoder().encode('shadownotes-vault-v1');
+
+/**
+ * PBKDF2 salt for passphrase-derived keys.
+ * NOTE (known limitation): This is still a fixed salt, meaning identical
+ * passphrases produce identical keys. A truly random per-vault salt stored in
+ * metadata would be ideal but requires schema migration. For a hackathon demo
+ * we include origin + version to make pre-computed rainbow tables infeasible.
+ */
+const PBKDF2_SALT = new TextEncoder().encode(
+  'shadownotes-vault-v1-pbkdf2-' +
+    (typeof location !== 'undefined' ? location.origin : 'electron'),
+);
 
 async function importAsHkdfKey(raw: Uint8Array): Promise<CryptoKey> {
   return crypto.subtle.importKey('raw', raw as unknown as ArrayBuffer, 'HKDF', false, ['deriveKey']);
@@ -10,7 +23,7 @@ function hkdfParams(info: string): HkdfParams {
   return {
     name: 'HKDF',
     hash: 'SHA-256',
-    salt: SALT,
+    salt: HKDF_SALT,
     info: new TextEncoder().encode(info),
   };
 }
@@ -86,7 +99,7 @@ export async function deriveKeyFromPassphrase(passphrase: string): Promise<Crypt
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: SALT,
+      salt: PBKDF2_SALT,
       iterations: 600_000,
       hash: 'SHA-256',
     },

@@ -1,5 +1,10 @@
 import type { DomainId, IntelligenceItem } from './types';
 
+/** HH:MM:SS timestamp from the current wall-clock time. */
+export function getTimestamp(): string {
+  return new Date().toISOString().split('T')[1].split('.')[0];
+}
+
 interface ExtractionRule {
   category: string;
   patterns: RegExp[];
@@ -203,7 +208,7 @@ export function extractIntelligence(text: string, domainId: DomainId): Intellige
     .map((s) => s.trim())
     .filter((s) => s.length > 3);
 
-  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const timestamp = getTimestamp();
   const items: IntelligenceItem[] = [];
   const seen = new Set<string>();
 

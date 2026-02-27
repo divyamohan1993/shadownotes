@@ -28,21 +28,24 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
   };
 
   return (
-    <div className="init-screen">
+    <div className="init-screen" role="main" aria-label="ShadowNotes domain selection">
       <div className="init-header">
-        <div className="stamp stamp-classified">CLASSIFIED</div>
+        <div className="stamp stamp-classified" aria-hidden="true">CLASSIFIED</div>
         <h1 className="init-title">SHADOW NOTES</h1>
         <p className="init-desc">Select operation domain to initialize secure capture session</p>
       </div>
 
-      <div className="domain-grid">
+      <div className="domain-grid" role="radiogroup" aria-label="Select operation domain">
         {DOMAINS.map((domain) => (
           <button
             key={domain.id}
             className={`domain-card ${selected === domain.id ? 'selected' : ''}`}
             onClick={() => setSelected(domain.id)}
+            role="radio"
+            aria-checked={selected === domain.id}
+            aria-label={`${domain.name}: ${domain.codename} — ${domain.clearanceLevel}`}
           >
-            <div className="domain-icon">{domain.icon}</div>
+            <div className="domain-icon" aria-hidden="true">{domain.icon}</div>
             <div className="domain-name">{domain.name}</div>
             <div className="domain-codename">{domain.codename}</div>
             <div className={`domain-clearance clearance-${domain.id}`}>
@@ -86,6 +89,7 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
         className="btn-begin"
         onClick={handleBegin}
         disabled={!selected}
+        aria-label={selected ? `Open case files for ${selected} domain` : 'Select a domain first'}
       >
         OPEN CASE FILES
       </button>
@@ -102,11 +106,11 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
         </a>
       </div>
 
-      <div className="init-footer">
-        <div className="status-dot status-secure" />
+      <div className="init-footer" role="status" aria-label="System status">
+        <div className="status-dot status-secure" aria-hidden="true" />
         <span>AI EXTRACTION ON-DEVICE</span>
-        <span className="separator">{'\u{2502}'}</span>
-        <div className="status-dot status-offline" />
+        <span className="separator" aria-hidden="true">{'\u{2502}'}</span>
+        <div className="status-dot status-offline" aria-hidden="true" />
         <span>RUNANYWHERE ENGINE</span>
       </div>
     </div>

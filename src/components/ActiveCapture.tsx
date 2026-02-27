@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { extractIntelligence } from '../extraction';
+import { extractIntelligence, getTimestamp } from '../extraction';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelCategory } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
+import { StructuredOutput } from '@runanywhere/web-llamacpp';
 import { usePerfConfig } from '../perfConfig';
 import { parseVoiceCommand, type VoiceCommand } from '../voiceCommands';
 import { startVoskCapture, preloadModel, type VoskSession } from '../voskEngine';
@@ -29,7 +30,7 @@ type CaptureMode = 'voice' | 'text';
 
 function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
   const items: IntelligenceItem[] = [];
-  const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+  const timestamp = getTimestamp();
 
   const categoryMap = new Map<string, string>();
   for (const cat of categories) {
@@ -96,6 +97,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   // LLM model loader
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
   const llmReadyRef = useRef(false);
+
+  // Streaming LLM output for real-time extraction feedback
+  const [streamingText, setStreamingText] = useState('');
 
   // Mutex for LLM generation — llama.cpp KV cache crashes on concurrent calls
   const llmBusyRef = useRef(false);
@@ -195,7 +199,7 @@ Example:
     }
   }, [perfConfig.ollamaModel, buildPrompt]);
 
-  // LLM extraction — serialized with Ollama cascade
+  // LLM extraction — streaming with Ollama cascade
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
     if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
 
@@ -206,23 +210,66 @@ Example:
 
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
+    setStreamingText('');
     try {
       const { userPrompt, systemPrompt } = buildPrompt(text, domain);
 
-      const generatePromise = TextGeneration.generate(userPrompt, {
+      // Use StructuredOutput to validate extraction format awareness
+      const hasStructuredSupport = typeof StructuredOutput?.extractJson === 'function';
+
+      // Streaming generation with advanced sampling parameters
+      const streamHandle = await TextGeneration.generateStream(userPrompt, {
         systemPrompt,
         maxTokens: perfConfig.maxTokens,
         temperature: perfConfig.temperature,
         topP: 0.9,
+        topK: 40,
+        stopSequences: ['\n\n\n', '---', 'End of extraction'],
       });
 
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('LLM_TIMEOUT')), 60_000),
-      );
+      // Accumulate tokens with real-time UI feedback
+      let accumulated = '';
+      const timeoutId = setTimeout(() => streamHandle.cancel(), 60_000);
 
-      const { text: response } = await Promise.race([generatePromise, timeoutPromise]);
+      for await (const token of streamHandle.stream) {
+        if (llmGenerationIdRef.current !== myId) {
+          streamHandle.cancel();
+          break;
+        }
+        accumulated += token;
+        setStreamingText(accumulated);
+      }
+
+      clearTimeout(timeoutId);
+      setStreamingText('');
+
       if (llmGenerationIdRef.current !== myId) return [];
-      return parseLLMResponse(response, domain.categories);
+
+      // Try StructuredOutput JSON extraction if response looks like JSON
+      if (hasStructuredSupport && accumulated.includes('{')) {
+        try {
+          const json = StructuredOutput.extractJson(accumulated);
+          if (json) {
+            const parsed = JSON.parse(json);
+            if (Array.isArray(parsed)) {
+              const typed = parsed as Array<{ category: string; content: string }>;
+              const timestamp = getTimestamp();
+              return typed
+                .filter(item => item.category && item.content)
+                .map(item => ({
+                  id: crypto.randomUUID(),
+                  category: item.category,
+                  content: item.content,
+                  timestamp,
+                }));
+            }
+          }
+        } catch {
+          // JSON extraction failed — fall through to line-based parsing
+        }
+      }
+
+      return parseLLMResponse(accumulated, domain.categories);
     } catch (err) {
       if (err instanceof Error && err.message === 'LLM_TIMEOUT') {
         console.warn('[ShadowNotes] Embedded LLM timed out — trying Ollama fallback');
@@ -234,6 +281,7 @@ Example:
       return [];
     } finally {
       llmBusyRef.current = false;
+      setStreamingText('');
     }
   }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt]);
 
@@ -273,7 +321,7 @@ Example:
 
   const saveManualAdd = useCallback(() => {
     if (manualAddCategory && manualAddValue.trim()) {
-      const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+      const timestamp = getTimestamp();
       onAddIntelligence([{
         id: crypto.randomUUID(),
         category: manualAddCategory,
@@ -311,7 +359,7 @@ Example:
     }
 
     const now = Date.now();
-    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    const timestamp = getTimestamp();
     const prev = lastFinalTextRef.current;
     const timeSinceLast = now - lastFinalTimeRef.current;
 
@@ -435,7 +483,7 @@ Example:
   const handleTextSubmit = useCallback(async () => {
     const text = textInput.trim();
     if (!text) return;
-    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    const timestamp = getTimestamp();
     onAddTranscript({ text, timestamp });
     setTextInput('');
     setIsTextExtracting(true);
@@ -447,7 +495,7 @@ Example:
     }
   }, [textInput, extractWithFallback, onAddTranscript, onAddIntelligence]);
 
-  const handleEndSession = useCallback(() => {
+  const handleEndSession = useCallback(async () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
@@ -457,10 +505,9 @@ Example:
     extractionAbortRef.current?.abort();
     const fullText = flushAccumulated();
     if (fullText) {
-      // Fire-and-forget extraction on remaining text
-      extractWithFallback(fullText).then(items => {
-        if (items.length > 0) onAddIntelligence(items);
-      });
+      // Await extraction before ending session to avoid post-unmount state updates
+      const items = await extractWithFallback(fullText);
+      if (items.length > 0) onAddIntelligence(items);
     }
     onEndSession();
   }, [flushAccumulated, extractWithFallback, onAddIntelligence, onEndSession]);
@@ -492,27 +539,27 @@ Example:
   })();
 
   return (
-    <div className="capture-screen">
-      <header className="capture-header">
+    <div className="capture-screen" role="main" aria-label="Intelligence capture session">
+      <header className="capture-header" role="banner">
         <div className="capture-header-left">
-          <div className="stamp stamp-small">{session.domain.clearanceLevel}</div>
-          <span className="case-number">CASE: {session.caseNumber}</span>
+          <div className="stamp stamp-small" aria-label={`Clearance level: ${session.domain.clearanceLevel}`}>{session.domain.clearanceLevel}</div>
+          <span className="case-number" aria-label={`Case number ${session.caseNumber}`}>CASE: {session.caseNumber}</span>
         </div>
         <div className="capture-header-center">
-          <span className="session-timer">{elapsed}</span>
+          <span className="session-timer" role="timer" aria-label={`Session duration: ${elapsed}`}>{elapsed}</span>
         </div>
         <div className="capture-header-right">
-          <div className="status-indicator">
+          <div className="status-indicator" role="status" aria-live="polite" aria-label={`AI status: ${llmStatusLabel}`}>
             <div className={`status-dot ${captureState === 'extracting' || isTextExtracting ? 'status-extracting' : (llmState === 'ready' || (perfConfig.ollamaEnabled && ollamaAvailable)) ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
           {onShowVoiceHelp && (
-            <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands">?</button>
+            <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands" aria-label="Show voice command help">?</button>
           )}
           {onDiscardSession && (
-            <button className="btn-discard" onClick={handleDiscard}>DISCARD</button>
+            <button className="btn-discard" onClick={handleDiscard} aria-label="Discard current session">DISCARD</button>
           )}
-          <button className="btn-end" onClick={handleEndSession}>
+          <button className="btn-end" onClick={handleEndSession} aria-label="End capture session">
             END SESSION
           </button>
         </div>
@@ -557,7 +604,7 @@ Example:
               </div>
             )}
             {session.transcripts.map((t, i) => (
-              <div key={i} className="transcript-entry">
+              <div key={`${t.timestamp}-${i}`} className="transcript-entry">
                 <span className="transcript-time">[{t.timestamp}]</span>
                 <span className="transcript-time-rel">{getRelativeTime(t.timestamp, session.startTime)}</span>
                 <span className="transcript-text">{t.text}</span>
@@ -649,11 +696,16 @@ Example:
 
           <div className="intel-list">
             {session.intelligence.length === 0 && (captureState === 'extracting' || isTextExtracting) && (
-              <div className="empty-state-capture extracting-state">
+              <div className="empty-state-capture extracting-state" role="status" aria-live="polite" aria-label="AI extraction in progress">
                 <div className="extracting-indicator">
                   <span className="extracting-spinner" />
                   <p>AI is decoding intelligence...</p>
                 </div>
+                {streamingText && (
+                  <div className="streaming-output" aria-label="Live AI output">
+                    <pre className="streaming-text">{streamingText}</pre>
+                  </div>
+                )}
               </div>
             )}
 

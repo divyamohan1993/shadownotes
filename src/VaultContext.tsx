@@ -172,7 +172,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       try {
         const content = await decryptContent(caseKey, s.encrypted);
         allIntel.push(...content.intelligence);
-      } catch { /* skip sessions that fail to decrypt */ }
+      } catch (e) { console.warn(`Skipping session ${s.id} — decryption failed:`, e); }
     }
     return allIntel;
   }, []);
@@ -223,7 +223,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
               results.push({ type: 'intelligence', case: c, session: s, excerpt: item.content, category: item.category, timestamp: item.timestamp });
             }
           }
-        } catch { /* skip sessions that fail to decrypt */ }
+        } catch (e) { console.warn(`Skipping session ${s.id} during search — decryption failed:`, e); }
       }
     }
     return results;
@@ -245,7 +245,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const bytes = new Uint8Array(reEncrypted);
       let binary = '';
       for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const { encrypted: _, ...meta } = s;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encrypted: _omitted, ...meta } = s;
       exportSessions.push({ meta, encrypted: btoa(binary) });
     }
 
@@ -262,8 +263,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const masterKey = ensureKey();
     const db = ensureDB();
     const text = await file.text();
-    const bundle = JSON.parse(text) as ShadowExportBundle;
-    if (bundle.format !== 'shadow-export-v1') throw new Error('Invalid .shadow file format');
+    const raw = JSON.parse(text);
+    if (!raw || typeof raw !== 'object' || !raw.version || !raw.cases || !Array.isArray(raw.cases)) {
+      throw new Error('Invalid .shadow file format');
+    }
+    const bundle = raw as ShadowExportBundle;
+    if (bundle.format !== 'shadow-export-v1') throw new Error('Unsupported .shadow file version');
     const importKey = await deriveKeyFromPassphrase(importPassword);
     let imported = 0;
 

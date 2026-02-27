@@ -1,5 +1,6 @@
 /**
  * Mock for @runanywhere/web-llamacpp
+ * Covers: TextGeneration (streaming), StructuredOutput, ToolCalling, Embeddings, VLM
  */
 import { vi } from 'vitest';
 
@@ -11,8 +12,8 @@ export const LlamaCPP = {
 
 const _mockStream = {
   async *[Symbol.asyncIterator]() {
-    yield 'Hello';
-    yield ' world';
+    yield '[Vulnerabilities] Test vulnerability found\n';
+    yield '[Timeline] 02:14 AM entry detected';
   },
 };
 
@@ -24,6 +25,7 @@ export const TextGeneration = {
       tokensUsed: 25,
       tokensPerSecond: 10.5,
       latencyMs: 2400,
+      timeToFirstTokenMs: 150,
     }),
     cancel: vi.fn(),
   })),
@@ -33,6 +35,42 @@ export const TextGeneration = {
     tokensPerSecond: 10.5,
     latencyMs: 1000,
   })),
+};
+
+export const StructuredOutput = {
+  preparePrompt: vi.fn((prompt: string) => prompt),
+  validate: vi.fn(() => ({ isValid: true })),
+  extractJson: vi.fn((text: string) => {
+    try {
+      const match = text.match(/\[[\s\S]*\]/);
+      return match ? match[0] : null;
+    } catch { return null; }
+  }),
+  getSystemPrompt: vi.fn(() => 'You are an extraction assistant.'),
+  hasCompleteJson: vi.fn(() => false),
+};
+
+export const ToolCalling = {
+  registerTool: vi.fn(),
+  unregisterTool: vi.fn(),
+  getRegisteredTools: vi.fn(() => []),
+  clearTools: vi.fn(),
+  generateWithTools: vi.fn(async () => ({
+    text: 'Tool response',
+    toolCalls: [],
+    toolResults: [],
+    isComplete: true,
+  })),
+};
+
+export const Embeddings = {
+  loadModel: vi.fn(async () => {}),
+  embed: vi.fn(async () => ({
+    embeddings: [{ data: new Float32Array(384), dimension: 384 }],
+    dimension: 384,
+    processingTimeMs: 50,
+  })),
+  cosineSimilarity: vi.fn(() => 0.85),
 };
 
 export const VLMWorkerBridge = {

@@ -159,7 +159,10 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
       userPrompt += `Known facts from prior sessions in this case:\n${session.priorContext}\n\n`;
     }
 
-    userPrompt += `Extract ${hasPrior ? 'NEW ' : ''}facts from this transcript. Use ONLY these categories: ${catList}
+    const today = new Date().toISOString().split('T')[0];
+    userPrompt += `Today's date is ${today}. Extract ${hasPrior ? 'NEW ' : ''}facts from this transcript. Use ONLY these categories: ${catList}
+
+When dates are mentioned relatively (e.g. "after 7 days", "next week", "in 2 weeks"), convert them to actual dates using today's date.
 
 Format each line exactly as: [Category] fact
 Example:

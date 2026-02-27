@@ -55,35 +55,37 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
         ))}
       </div>
 
-      {selected && llmState === 'downloading' && (
-        <div className="llm-status">
-          <div className="llm-progress-bar">
-            <div className="llm-progress-fill" style={{ width: `${Math.round(llmProgress * 100)}%` }} />
+      <div aria-live="polite" aria-atomic="true">
+        {selected && llmState === 'downloading' && (
+          <div className="llm-status" role="status">
+            <div className="llm-progress-bar" role="progressbar" aria-valuenow={Math.round(llmProgress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="AI engine download progress">
+              <div className="llm-progress-fill" style={{ width: `${Math.round(llmProgress * 100)}%` }} />
+            </div>
+            <span className="llm-status-text">
+              LOADING AI ENGINE — {Math.round(llmProgress * 100)}%
+            </span>
           </div>
-          <span className="llm-status-text">
-            LOADING AI ENGINE — {Math.round(llmProgress * 100)}%
-          </span>
-        </div>
-      )}
-      {selected && llmState === 'loading' && (
-        <div className="llm-status">
-          <span className="llm-status-text">INITIALIZING AI ENGINE...</span>
-        </div>
-      )}
-      {selected && llmState === 'ready' && (
-        <div className="llm-status">
-          <span className="llm-status-text llm-status-ready">
-            {'\u2713'} AI ENGINE READY
-          </span>
-        </div>
-      )}
-      {selected && llmState === 'error' && (
-        <div className="llm-status">
-          <span className="llm-status-text llm-status-error">
-            AI ENGINE UNAVAILABLE — KEYWORD MODE ACTIVE
-          </span>
-        </div>
-      )}
+        )}
+        {selected && llmState === 'loading' && (
+          <div className="llm-status" role="status">
+            <span className="llm-status-text">INITIALIZING AI ENGINE...</span>
+          </div>
+        )}
+        {selected && llmState === 'ready' && (
+          <div className="llm-status" role="status">
+            <span className="llm-status-text llm-status-ready">
+              {'\u2713'} AI ENGINE READY
+            </span>
+          </div>
+        )}
+        {selected && llmState === 'error' && (
+          <div className="llm-status" role="alert">
+            <span className="llm-status-text llm-status-error">
+              AI ENGINE UNAVAILABLE — KEYWORD MODE ACTIVE
+            </span>
+          </div>
+        )}
+      </div>
 
       <button
         className="btn-begin"
@@ -95,13 +97,13 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
       </button>
 
       <div className="init-actions-row">
-        <button className="btn-init-action" onClick={onSearch} title="Search all cases">
+        <button className="btn-init-action" onClick={onSearch} title="Search all cases" aria-label="Search vault across all cases">
           {'\u{1F50D}'} SEARCH VAULT
         </button>
-        <button className="btn-init-action" onClick={onImport} title="Import .shadow file">
+        <button className="btn-init-action" onClick={onImport} title="Import .shadow file" aria-label="Import dossier from shadow file">
           {'\u{1F4E5}'} IMPORT DOSSIER
         </button>
-        <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-init-action">
+        <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-init-action" aria-label="Open field manual in new tab">
           {'\u{1F4D6}'} FIELD MANUAL
         </a>
       </div>

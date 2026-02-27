@@ -10,7 +10,7 @@ ShadowNotes is a single-page React application that combines browser-native spee
 |                                                                   |
 |  +--------------------+    +------------------+    +------------+ |
 |  |   React 19 App     |    |  RunAnywhere SDK |    |   WASM     | |
-|  |   (TypeScript)     |--->|  (2 packages)    |--->|  Runtime   | |
+|  |   (TypeScript)     |--->|  (3 packages)    |--->|  Runtime   | |
 |  +--------------------+    +------------------+    +------------+ |
 |         |                         |                      |        |
 |         v                         v                      v        |
@@ -160,18 +160,41 @@ This is parsed by the regex `/^\[([^\]]+)\]\s*(.+)/` in `ActiveCapture.tsx` to c
 
 ## RunAnywhere SDK Integration
 
-ShadowNotes deeply integrates the RunAnywhere Web SDK across two packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`), focusing on the features that are genuinely load-bearing in the extraction pipeline:
+ShadowNotes deeply integrates the RunAnywhere Web SDK across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 20+ genuinely load-bearing API calls:
 
-| SDK Feature | Package | API Used | How It's Used |
-|-------------|---------|----------|---------------|
-| **Streaming Text Generation** | `web-llamacpp` | `TextGeneration.generateStream()` | The core extraction engine. Streams tokens one-by-one into the intelligence panel with real-time cursor animation. Domain-specific system prompts guide extraction and correct speech recognition errors. |
-| **Structured Output** | `web-llamacpp` | `StructuredOutput.extractJson()` | JSON schema-guided validation fallback. When the LLM returns structured JSON instead of bracketed text, this ensures reliable parsing without losing data. |
-| **Advanced Sampling** | `web-llamacpp` | `topK`, `topP`, `temperature`, `stopSequences` | `topK: 40`, `topP: 0.9`, `temperature: 0.3` tuned for factual extraction. `stopSequences: ['\n\n\n', '---']` terminates early at extraction boundaries. Configurable via performance presets. |
-| **Model Manager** | `web` | `ModelManager.register()` | Registers the Qwen2.5 model with the LlamaCPP framework. Manages model lifecycle — download, cache in OPFS, and load for inference. |
-| **EventBus** | `web` | Event subscriptions | Real-time download progress events drive the progress bar UI. Provides percentage updates without polling. |
-| **OPFSStorage** | `web` | OPFS cache management | Model cache in the browser's Origin Private File System (~400MB). Enables instant startup on return visits — no re-download needed. |
-| **`RunAnywhere.initialize()`** | `web` | GPU detection | Probes WebGPU + shader-f16 support with crash recovery. Falls back to CPU if WebGPU fails, ensuring the LLM runs on any hardware. |
-| **LlamaCPP Framework** | `web-llamacpp` | Framework registration | Registered as the inference backend. Handles WebGPU acceleration with automatic CPU fallback and WASM thread management via SharedArrayBuffer. |
+### @runanywhere/web — Core Infrastructure
+
+| SDK Feature | API Used | How It's Used |
+|-------------|----------|---------------|
+| **SDK Init** | `RunAnywhere.initialize()` | Probes WebGPU + shader-f16 with crash recovery. Falls back to CPU if WebGPU fails. |
+| **Model Manager** | `ModelManager.register()` | Registers the Qwen2.5 model with LlamaCPP framework. Manages download, OPFS cache, and load. |
+| **EventBus** | Event subscriptions | Real-time download progress events drive the progress bar UI without polling. |
+| **OPFSStorage** | OPFS cache management | Model cache in browser's Origin Private File System (~400MB). Instant startup on return visits. |
+| **SDKLogger** | Logging | SDK-level logging for debugging and diagnostics. |
+| **VoicePipeline + VoiceAgent** | Pipeline orchestration | Voice pipeline coordination for STT → LLM → TTS flow. |
+| **detectCapabilities()** | Device detection | Detects WebGPU, WASM SIMD, device memory, hardware concurrency at startup. |
+
+### @runanywhere/web-llamacpp — LLM, ToolCalling, Embeddings
+
+| SDK Feature | API Used | How It's Used |
+|-------------|----------|---------------|
+| **Streaming Text Generation** | `TextGeneration.generateStream()` | Core extraction engine. Streams tokens into intelligence panel with cursor animation. |
+| **Structured Output** | `StructuredOutput.extractJson()` | JSON schema validation fallback for reliable parsing. |
+| **ToolCalling** | `ToolCalling.generateWithTools()` | Secondary extraction path with domain-specific tools (`extract_finding`, `flag_anomaly`). Deterministic structured extraction with confidence scoring and anomaly detection. |
+| **Embeddings** | `Embeddings.embed()`, `embedBatch()`, `cosineSimilarity()` | Semantic deduplication of extracted findings (0.85 cosine threshold). Batch embedding with caching for efficiency. |
+| **Advanced Sampling** | `topK`, `topP`, `temperature`, `stopSequences` | `topK: 40`, `topP: 0.9`, `temperature: 0.3` for factual extraction. Configurable via presets. |
+| **LlamaCPP Framework** | `LlamaCPP.register()` | Inference backend with WebGPU acceleration and automatic CPU fallback. |
+
+### @runanywhere/web-onnx — Audio Pipeline
+
+| SDK Feature | API Used | How It's Used |
+|-------------|----------|---------------|
+| **ONNX Backend** | `ONNX.register()` | Registers ONNX runtime for audio model inference. Graceful fallback when unavailable. |
+| **Speech-to-Text** | `STT.transcribe()` | On-device transcription of speech segments detected by VAD. Falls back to Web Speech API. |
+| **Text-to-Speech** | `TTS.synthesize()` | On-device voice feedback after extraction (e.g., "Extracted 3 findings"). |
+| **Voice Activity Detection** | `VAD.onSpeechActivity()`, `processSamples()` | Real-time speech detection driving audio level visualizer with actual VAD data. |
+| **Audio Capture** | `AudioCapture` (16kHz mono) | Microphone capture feeding PCM audio to VAD → STT pipeline. |
+| **Audio Playback** | `AudioPlayback` (22kHz) | Plays TTS-synthesized audio with lazy initialization and proper cleanup. |
 
 ## File Structure
 
@@ -179,13 +202,14 @@ ShadowNotes deeply integrates the RunAnywhere Web SDK across two packages (`@run
 src/
   main.tsx                       # React DOM entry point
   App.tsx                        # App shell: boot sequence, screen routing, session state
-  runanywhere.ts                 # SDK init — LLM streaming, model lifecycle, GPU detection
+  runanywhere.ts                 # SDK init — all 3 packages, GPU detection, crash recovery
   extraction.ts                  # Keyword-based intelligence extraction (regex fallback)
-  crypto.ts                      # AES-256-GCM + HKDF + PBKDF2 encryption
-  auth.ts                        # WebAuthn with PRF extension
+  toolExtraction.ts              # ToolCalling-based structured extraction engine
+  crypto.ts                      # AES-256-GCM + HKDF + PBKDF2 (random per-vault salt)
+  auth.ts                        # WebAuthn with PRF extension (chunked base64)
   vault.ts                       # Encrypted IndexedDB storage layer
   storage.ts                     # Low-level IndexedDB operations
-  VaultContext.tsx                # React Context for vault state management
+  VaultContext.tsx                # React Context + error handling + DoS protection
   types.ts                       # TypeScript interfaces (DomainProfile, SessionData, etc.)
   domains.ts                     # 4 domain profiles with system prompts + speech corrections
   voiceCommands.ts               # Voice command parser with fuzzy matching
@@ -197,6 +221,9 @@ src/
   hooks/
     useModelLoader.ts            # Model download + loading lifecycle hook
     useAutoSave.ts               # Debounced auto-save with draft management
+    useAudioPipeline.ts          # On-device STT + VAD + AudioCapture (ONNX)
+    useTTS.ts                    # On-device TTS + AudioPlayback (ONNX)
+    useEmbeddings.ts             # Semantic deduplication via embeddings
   components/
     SessionInit.tsx              # Domain selection + LLM preload progress
     ActiveCapture.tsx            # Streaming LLM extraction + speech pipeline + split view

@@ -5,9 +5,16 @@ import { deriveKeyFromBytes, deriveCaseKey, encryptContent, decryptContent, deri
 import { registerCredential, authenticateCredential } from './auth';
 import type { VaultCase, VaultSession, DomainId, SessionContent, SearchResult, ShadowExportBundle, IntelligenceItem } from './types';
 
+/** Maximum number of cases allowed in a single import (DoS protection). */
+const IMPORT_MAX_CASES = 100;
+/** Maximum total sessions allowed in a single import (DoS protection). */
+const IMPORT_MAX_SESSIONS = 1000;
+
 interface VaultContextValue {
   isUnlocked: boolean;
   authMethod: 'prf' | 'passphrase' | null;
+  /** Descriptive message from the last failed vault operation, or `null` if the most recent operation succeeded. */
+  lastError: string | null;
   unlock: () => Promise<void>;
   unlockWithPassphrase: (passphrase: string) => Promise<void>;
   listCases: (domainId: DomainId) => Promise<VaultCase[]>;
@@ -45,9 +52,14 @@ export function useVault(): VaultContextValue {
 export function VaultProvider({ children }: { children: ReactNode }) {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [authMethod, setAuthMethod] = useState<'prf' | 'passphrase' | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
   const masterKeyRef = useRef<CryptoKey | null>(null);
   const dbRef = useRef<VaultDB | null>(null);
   const storageRef = useRef<StorageManager | null>(null);
+
+  /** Clear lastError on success, set it on failure. */
+  const clearError = () => setLastError(null);
+  const setError = (msg: string) => setLastError(msg);
 
   useEffect(() => {
     const db = new VaultDB();
@@ -201,32 +213,51 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const searchAll = useCallback(async (query: string): Promise<SearchResult[]> => {
-    const masterKey = ensureKey();
-    const db = ensureDB();
-    const allCases = await db.getAllCases();
-    const results: SearchResult[] = [];
-    const q = query.toLowerCase();
+    try {
+      const masterKey = ensureKey();
+      const db = ensureDB();
+      const allCases = await db.getAllCases();
+      const results: SearchResult[] = [];
+      const q = query.toLowerCase();
+      let decryptionFailures = 0;
 
-    for (const c of allCases) {
-      const sessions = await db.listSessions(c.id);
-      const caseKey = await deriveCaseKey(masterKey, c.id);
-      for (const s of sessions) {
-        try {
-          const content = await decryptContent(caseKey, s.encrypted);
-          for (const t of content.transcripts) {
-            if (t.text.toLowerCase().includes(q)) {
-              results.push({ type: 'transcript', case: c, session: s, excerpt: t.text, timestamp: t.timestamp });
+      for (const c of allCases) {
+        const sessions = await db.listSessions(c.id);
+        const caseKey = await deriveCaseKey(masterKey, c.id);
+        for (const s of sessions) {
+          try {
+            const content = await decryptContent(caseKey, s.encrypted);
+            for (const t of content.transcripts) {
+              if (t.text.toLowerCase().includes(q)) {
+                results.push({ type: 'transcript', case: c, session: s, excerpt: t.text, timestamp: t.timestamp });
+              }
             }
-          }
-          for (const item of content.intelligence) {
-            if (item.content.toLowerCase().includes(q)) {
-              results.push({ type: 'intelligence', case: c, session: s, excerpt: item.content, category: item.category, timestamp: item.timestamp });
+            for (const item of content.intelligence) {
+              if (item.content.toLowerCase().includes(q)) {
+                results.push({ type: 'intelligence', case: c, session: s, excerpt: item.content, category: item.category, timestamp: item.timestamp });
+              }
             }
+          } catch (e) {
+            decryptionFailures++;
+            console.warn(`Skipping session ${s.id} during search -- decryption failed:`, e);
           }
-        } catch (e) { console.warn(`Skipping session ${s.id} during search — decryption failed:`, e); }
+        }
       }
+
+      if (decryptionFailures > 0) {
+        const msg = `Search completed with ${decryptionFailures} session(s) that could not be decrypted. These sessions may have been created with a different key.`;
+        console.warn(msg);
+        setError(msg);
+      } else {
+        clearError();
+      }
+
+      return results;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Search failed unexpectedly';
+      setError(msg);
+      throw e;
     }
-    return results;
   }, []);
 
   const exportCase = useCallback(async (caseId: string, exportPassword: string): Promise<Blob> => {
@@ -260,41 +291,112 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const importDossier = useCallback(async (file: File, importPassword: string): Promise<number> => {
-    const masterKey = ensureKey();
-    const db = ensureDB();
-    const text = await file.text();
-    const raw = JSON.parse(text);
-    if (!raw || typeof raw !== 'object' || !raw.version || !raw.cases || !Array.isArray(raw.cases)) {
-      throw new Error('Invalid .shadow file format');
-    }
-    const bundle = raw as ShadowExportBundle;
-    if (bundle.format !== 'shadow-export-v1') throw new Error('Unsupported .shadow file version');
-    const importKey = await deriveKeyFromPassphrase(importPassword);
-    let imported = 0;
+    try {
+      const masterKey = ensureKey();
+      const db = ensureDB();
+      const text = await file.text();
 
-    for (const exportCase of bundle.cases) {
-      const caseId = await db.createCase({ domainId: exportCase.case.domainId, name: exportCase.case.name });
-      const caseKey = await deriveCaseKey(masterKey, caseId);
-
-      for (const es of exportCase.sessions) {
-        const binary = atob(es.encrypted);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const content = await decryptContent(importKey, bytes.buffer);
-        const encrypted = await encryptContent(caseKey, content);
-        await db.createSession({
-          caseId,
-          caseNumber: es.meta.caseNumber,
-          duration: es.meta.duration,
-          segmentCount: es.meta.segmentCount,
-          findingCount: es.meta.findingCount,
-          sizeBytes: encrypted.byteLength,
-          encrypted,
-        });
-        imported++;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        throw new Error('Import file is not valid JSON');
       }
+
+      if (!raw || typeof raw !== 'object' || !('version' in raw) || !('cases' in raw) || !Array.isArray((raw as Record<string, unknown>).cases)) {
+        throw new Error('Invalid .shadow file format');
+      }
+      const bundle = raw as ShadowExportBundle;
+      if (bundle.format !== 'shadow-export-v1') throw new Error('Unsupported .shadow file version');
+
+      // --- DoS protection ---
+      if (bundle.cases.length > IMPORT_MAX_CASES) {
+        throw new Error(`Import rejected: file contains ${bundle.cases.length} cases (maximum ${IMPORT_MAX_CASES})`);
+      }
+      let totalSessions = 0;
+      for (const ec of bundle.cases) {
+        if (ec.sessions) totalSessions += ec.sessions.length;
+      }
+      if (totalSessions > IMPORT_MAX_SESSIONS) {
+        throw new Error(`Import rejected: file contains ${totalSessions} sessions (maximum ${IMPORT_MAX_SESSIONS})`);
+      }
+
+      // --- Schema validation ---
+      const validDomainIds = new Set<string>(['security', 'legal', 'medical', 'incident']);
+
+      for (let ci = 0; ci < bundle.cases.length; ci++) {
+        const ec = bundle.cases[ci];
+        if (!ec.case || typeof ec.case !== 'object') {
+          throw new Error(`Import validation failed: cases[${ci}].case is missing or invalid`);
+        }
+        if (!ec.case.domainId || !validDomainIds.has(ec.case.domainId)) {
+          throw new Error(`Import validation failed: cases[${ci}].case.domainId is invalid ("${ec.case.domainId}")`);
+        }
+        if (!ec.case.name || typeof ec.case.name !== 'string') {
+          throw new Error(`Import validation failed: cases[${ci}].case.name is missing or not a string`);
+        }
+        if (!ec.case.id || typeof ec.case.id !== 'string') {
+          throw new Error(`Import validation failed: cases[${ci}].case.id is missing or not a string`);
+        }
+        if (!Array.isArray(ec.sessions)) {
+          throw new Error(`Import validation failed: cases[${ci}].sessions is not an array`);
+        }
+
+        for (let si = 0; si < ec.sessions.length; si++) {
+          const es = ec.sessions[si];
+          if (!es.meta || typeof es.meta !== 'object') {
+            throw new Error(`Import validation failed: cases[${ci}].sessions[${si}].meta is missing`);
+          }
+          if (!es.meta.caseId || typeof es.meta.caseId !== 'string') {
+            throw new Error(`Import validation failed: cases[${ci}].sessions[${si}].meta.caseId is missing`);
+          }
+          if (!es.meta.caseNumber || typeof es.meta.caseNumber !== 'string') {
+            throw new Error(`Import validation failed: cases[${ci}].sessions[${si}].meta.caseNumber is missing`);
+          }
+          if (!es.encrypted || typeof es.encrypted !== 'string') {
+            throw new Error(`Import validation failed: cases[${ci}].sessions[${si}].encrypted is missing or not a string`);
+          }
+          // Validate base64 format (must only contain valid base64 characters)
+          if (!/^[A-Za-z0-9+/]*={0,2}$/.test(es.encrypted)) {
+            throw new Error(`Import validation failed: cases[${ci}].sessions[${si}].encrypted is not valid base64`);
+          }
+        }
+      }
+
+      // --- Import ---
+      const importKey = await deriveKeyFromPassphrase(importPassword);
+      let imported = 0;
+
+      for (const exportCase of bundle.cases) {
+        const caseId = await db.createCase({ domainId: exportCase.case.domainId, name: exportCase.case.name });
+        const caseKey = await deriveCaseKey(masterKey, caseId);
+
+        for (const es of exportCase.sessions) {
+          const binary = atob(es.encrypted);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const content = await decryptContent(importKey, bytes.buffer);
+          const encrypted = await encryptContent(caseKey, content);
+          await db.createSession({
+            caseId,
+            caseNumber: es.meta.caseNumber,
+            duration: es.meta.duration,
+            segmentCount: es.meta.segmentCount,
+            findingCount: es.meta.findingCount,
+            sizeBytes: encrypted.byteLength,
+            encrypted,
+          });
+          imported++;
+        }
+      }
+
+      clearError();
+      return imported;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Import failed unexpectedly';
+      setError(msg);
+      throw e;
     }
-    return imported;
   }, []);
 
   const destroyVault = useCallback(async () => {
@@ -310,7 +412,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   return (
     <VaultContext.Provider value={{
-      isUnlocked, authMethod, unlock, unlockWithPassphrase,
+      isUnlocked, authMethod, lastError, unlock, unlockWithPassphrase,
       listCases, createCase, deleteCase, findCase,
       listSessions, saveSession, loadSession, updateSession, deleteSession, getSessionCount,
       saveDraft, updateDraft, loadPriorContext,

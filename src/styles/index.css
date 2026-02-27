@@ -3782,6 +3782,36 @@ input:focus, textarea:focus, select:focus {
   border-left: 3px solid var(--green-secure);
   color: var(--green-secure);
 }
+.export-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.export-progress-bar {
+  height: 3px;
+  background: var(--bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.export-progress-fill {
+  height: 100%;
+  background: var(--accent-amber);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.export-progress-indeterminate {
+  width: 100% !important;
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+@keyframes progress-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.export-progress-text {
+  font-size: 0.65rem;
+  color: var(--accent-amber);
+  letter-spacing: 0.1em;
+}
 .export-actions {
   display: flex;
   justify-content: flex-end;
@@ -3979,4 +4009,183 @@ input:focus, textarea:focus, select:focus {
   .domain-card.selected {
     border: 3px solid Highlight;
   }
+}
+
+/* ============================================================
+   SDK FEATURE UI ELEMENTS
+   ============================================================ */
+
+/* SDK Feature Status Badges */
+.sdk-status {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-left: 0.75rem;
+}
+
+.sdk-badge {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.4rem;
+  border-radius: 2px;
+  border: 1px solid var(--text-dim);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.sdk-badge.active {
+  border-color: var(--green-secure);
+  color: var(--green-secure);
+  box-shadow: 0 0 6px rgba(39, 174, 96, 0.2);
+}
+
+/* Real-time VAD bars (driven by actual audio levels) */
+.vad-bar-realtime {
+  transition: height 0.05s linear;
+  background: var(--green-secure);
+  box-shadow: 0 0 4px var(--green-glow);
+}
+
+/* TTS Speaking Animation */
+.tts-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(39, 174, 96, 0.1);
+  border: 1px solid var(--green-secure);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  color: var(--green-secure);
+  animation: tts-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes tts-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Audio Pipeline Status */
+.pipeline-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  margin-bottom: 0.75rem;
+}
+
+.pipeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.pipeline-dot.active {
+  background: var(--green-secure);
+  box-shadow: 0 0 6px var(--green-glow);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Passphrase Strength Meter */
+.passphrase-strength {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-color);
+  transition: background 0.3s ease;
+}
+
+.strength-bar.weak { background: var(--red-destroy); }
+.strength-bar.fair { background: var(--accent-amber); }
+.strength-bar.good { background: var(--green-secure); }
+.strength-bar.strong { background: var(--green-secure); box-shadow: 0 0 4px var(--green-glow); }
+
+.strength-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 0.25rem;
+}
+
+/* Enhanced Focus Indicators */
+.case-card:focus-visible,
+.domain-card:focus-visible,
+.session-card:focus-visible {
+  outline: 2px solid var(--accent-amber);
+  outline-offset: 2px;
+  border-color: var(--accent-amber);
+}
+
+/* Focus Trap Overlay */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Skeleton Loading States */
+@keyframes skeleton-pulse {
+  0% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+  100% { opacity: 0.4; }
+}
+
+.skeleton {
+  background: var(--bg-input);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 0.75rem;
+  margin-bottom: 0.5rem;
+  width: 100%;
+}
+
+.skeleton-line.short { width: 60%; }
+.skeleton-line.medium { width: 80%; }
+
+/* Error/Warning Banner */
+.error-banner {
+  padding: 0.75rem 1rem;
+  background: rgba(192, 57, 43, 0.15);
+  border: 1px solid var(--red-destroy);
+  border-radius: 4px;
+  color: var(--red-destroy);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.warning-banner {
+  padding: 0.75rem 1rem;
+  background: rgba(212, 168, 67, 0.15);
+  border: 1px solid var(--accent-amber);
+  border-radius: 4px;
+  color: var(--accent-amber);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }

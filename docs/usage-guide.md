@@ -9,8 +9,9 @@
 | **Microphone** | Any working microphone for voice capture |
 | **Disk Space** | ~400MB for LLM model download (one-time, cached in OPFS) |
 | **RAM** | 2GB+ free (for WASM model inference) |
+| **ONNX Models** *(optional)* | On-device STT, VAD, and TTS models (~50MB total, auto-downloaded). Enables voice activity detection, on-device speech-to-text, and spoken feedback. Falls back gracefully to Web Speech API if unavailable. |
 
-The app runs identically on **Windows**, **macOS**, and **Linux**. No platform-specific setup required.
+The app runs identically on **Windows**, **macOS**, and **Linux**. No platform-specific setup required. All three RunAnywhere SDK packages are used: **web**, **web-llamacpp**, and **web-onnx**.
 
 ---
 
@@ -61,7 +62,7 @@ When you first open ShadowNotes, you'll see a classified-style boot sequence:
 [AI]  Loading on-device inference engine...      ✓
 ```
 
-This initializes the RunAnywhere SDK, registers the LLM model backend, and prepares the streaming extraction pipeline. It takes 1-2 seconds.
+This initializes the RunAnywhere SDK, registers both the LlamaCPP backend (for LLM text generation) and the ONNX backend (for STT, VAD, TTS, and embeddings), and prepares the streaming extraction pipeline. It takes 1-2 seconds.
 
 ### Step 2: Select Your Domain
 
@@ -76,7 +77,9 @@ You'll see four domain cards. Select the one that matches your use case:
 
 ### Step 2b: Unlock Vault
 
-Before starting a session, you'll authenticate via WebAuthn biometrics (Windows Hello / Touch ID) or a passphrase. This derives the encryption key used to protect your session data at rest.
+Before starting a session, you'll authenticate via WebAuthn biometrics (Windows Hello / Touch ID) or a passphrase. This derives the encryption key used to protect your session data at rest. Each vault uses a random PBKDF2 salt for key derivation.
+
+When entering a passphrase, a real-time **strength indicator** rates it as WEAK, FAIR, STRONG, or EXCELLENT. A **show/hide toggle** lets you verify what you typed. Strong passphrases are recommended for maximum security.
 
 ### Step 3: Begin Session
 
@@ -88,22 +91,23 @@ A progress bar shows download status. The model is cached in your browser's priv
 
 After models load, you enter the capture screen:
 
-- **Header**: Shows clearance level, case number (SN-YYMMDD-XXXX), session timer, and AI status indicator (PENDING/LOADING/ACTIVE/KEYWORDS)
+- **Header**: Shows clearance level, case number (SN-YYMMDD-XXXX), session timer, and **SDK status badges** for each on-device capability: LLM, STT, VAD, TTS, and EMB (embeddings). Each badge shows its current state (PENDING/LOADING/ACTIVE/ERROR).
 - **Domain Banner**: Shows the operation codename (e.g., "OPERATION FIREWALL")
 - **Left Panel (RAW TRANSCRIPT)**: Shows all transcribed speech segments with timestamps
 - **Right Panel (INTELLIGENCE EXTRACT)**: Shows AI-extracted findings grouped by category
 
 #### Recording
 
-1. Click **"BEGIN CAPTURE"** to activate your microphone via the Web Speech API
-2. Speak naturally — the browser detects speech automatically
-3. The 12-bar audio visualizer shows capture state
-4. When you finish a phrase, the segment is automatically:
-   - Transcribed by the browser's speech engine (real-time)
-   - Analyzed by the streaming on-device LLM (`TextGeneration.generateStream()`) — tokens appear in real-time in the intelligence panel
-   - If the LLM is still loading, keyword extraction provides instant fallback results
-5. Streaming LLM output appears token-by-token with a cursor blink animation. Results are validated via `StructuredOutput.extractJson()` and grouped by category
-6. Click **"PAUSE CAPTURE"** to temporarily stop recording
+1. Click **"BEGIN CAPTURE"** to activate your microphone. On-device STT via ONNX is used when available; otherwise, the Web Speech API provides a graceful fallback.
+2. Speak naturally — **on-device VAD** (Voice Activity Detection) monitors real audio levels and detects actual speech, distinguishing it from background noise. The 12-bar audio visualizer reflects real VAD audio levels (not animated placeholders).
+3. When you finish a phrase, the segment goes through a **three-layer extraction cascade**:
+   - **Layer 1 — LLM Streaming**: The on-device LLM (`TextGeneration.generateStream()`) analyzes the transcript and streams structured intelligence tokens in real-time.
+   - **Layer 2 — Tool Calling**: If the LLM supports it, structured tool-calling extraction runs as a secondary pass.
+   - **Layer 3 — Keywords**: If the LLM is still loading or unavailable, keyword-based extraction provides instant fallback results.
+4. **Embeddings-based semantic deduplication** (via the EMB model) prevents duplicate findings from appearing in the intelligence panel. Similar extractions are merged automatically.
+5. Streaming LLM output appears token-by-token with a cursor blink animation. Results are validated via `StructuredOutput.extractJson()` and grouped by category.
+6. After extraction completes, **on-device TTS** provides spoken voice feedback summarizing what was extracted, giving you audio confirmation without looking at the screen.
+7. Click **"PAUSE CAPTURE"** to temporarily stop recording.
 
 #### Intelligence Categories
 
@@ -141,8 +145,8 @@ The dossier view presents a complete summary:
 **Save to Vault**: Sessions are auto-saved with debounced encryption (AES-256-GCM) to your encrypted vault. You can return to previous sessions from the Case List.
 
 **Destroy Session**:
-1. Click **"DESTROY SESSION"** — the button changes to **"CONFIRM: DESTROY ALL SESSION DATA"**
-2. Click again within 5 seconds to confirm (auto-resets after timeout)
+1. Click **"DESTROY SESSION"** — a visual **countdown timer** appears, giving you a clear window to confirm or cancel
+2. Click again before the countdown expires to confirm (auto-resets after timeout)
 3. A cinematic burn animation plays:
    - "Wiping transcript buffer..."
    - "Purging intelligence extracts..."
@@ -159,7 +163,18 @@ Say **"Hey Shadow"** followed by a command:
 
 ---
 
-## Keyboard & Browser Tips
+## Keyboard Navigation & Accessibility
+
+ShadowNotes is fully keyboard-navigable and screen-reader-friendly:
+
+- **Tab / Shift+Tab** — move focus between all interactive elements (buttons, inputs, cards, intelligence items)
+- **Enter** — activate the focused element (select a domain, begin capture, confirm actions)
+- **Escape** — close modals (GlobalSearch, ExportModal) and cancel pending actions
+- **Focus traps** — modals like GlobalSearch and ExportModal trap focus inside them so keyboard users stay in context
+- **ARIA labels and live regions** — all controls have descriptive labels; intelligence extractions and status changes are announced to screen readers via ARIA live regions
+- **Empty state guidance** — when no sessions or findings exist, helpful prompts guide you on what to do next
+
+## Browser Tips
 
 - **Don't close the tab accidentally** — a `beforeunload` warning will prompt you during active sessions
 - **DevTools Network tab** — open it to verify zero network requests during your session

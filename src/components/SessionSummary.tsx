@@ -24,6 +24,7 @@ function getRelativeTime(timestampStr: string, sessionCreatedAt: number): string
 
 export function SessionSummary({ domain, vaultSession, content, onUpdateIntelligence, onDeleteIntelligence, onDeleteSession, onBack }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteCountdown, setDeleteCountdown] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -62,12 +63,23 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
     await onDeleteSession();
   };
 
-  // Reset confirm after timeout
+  // Countdown timer for delete confirmation
   useEffect(() => {
-    if (confirmDelete) {
-      const t = setTimeout(() => setConfirmDelete(false), 5000);
-      return () => clearTimeout(t);
+    if (!confirmDelete) {
+      setDeleteCountdown(0);
+      return;
     }
+    setDeleteCountdown(5);
+    const interval = setInterval(() => {
+      setDeleteCountdown(prev => {
+        if (prev <= 1) {
+          setConfirmDelete(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
   }, [confirmDelete]);
 
   const formatDuration = (seconds: number) => {
@@ -159,13 +171,14 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
         <div className="dossier-section">
           <div className="dossier-section-header">
             <h2 className="section-heading">
-              <span className="section-marker">{'\u{25B8}'}</span>
+              <span className="section-marker" aria-hidden="true">{'\u{25B8}'}</span>
               RAW TRANSCRIPT
             </h2>
             {content.transcripts.length > 0 && (
               <button
                 className={`btn-copy ${copiedId === 'transcript' ? 'copied' : ''}`}
                 onClick={() => handleCopy(content.transcripts.map(t => `[${t.timestamp}] ${t.text}`).join('\n'), 'transcript')}
+                aria-label={copiedId === 'transcript' ? 'Transcript copied to clipboard' : 'Copy transcript to clipboard'}
               >
                 {copiedId === 'transcript' ? 'COPIED' : 'COPY'}
               </button>
@@ -189,7 +202,7 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
         {/* Intelligence section */}
         <div className="dossier-section">
           <h2 className="section-heading">
-            <span className="section-marker">{'\u{25B8}'}</span>
+            <span className="section-marker" aria-hidden="true">{'\u{25B8}'}</span>
             INTELLIGENCE EXTRACT
           </h2>
 
@@ -203,8 +216,8 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
                 <div key={cat} className="dossier-intel-group">
                   <h3 className="dossier-intel-category">{cat.toUpperCase()}</h3>
                   {items.map((item) => (
-                    <div key={item.id} className="dossier-intel-item">
-                      <span className="dossier-bullet">{'\u{25CF}'}</span>
+                    <div key={item.id} className="dossier-intel-item" role="group" aria-label={`Intelligence finding: ${item.content.substring(0, 50)}`}>
+                      <span className="dossier-bullet" aria-hidden="true">{'\u{25CF}'}</span>
                       {editingId === item.id ? (
                         <input
                           className="intel-edit-input"
@@ -213,21 +226,38 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } else if (e.key === 'Escape') cancelEdit(); }}
                           onBlur={saveEdit}
                           autoFocus
+                          aria-label={`Edit finding: ${item.content.substring(0, 30)}`}
                         />
                       ) : (
-                        <span className="intel-content-editable" onClick={() => startEdit(item)} title="Click to edit">
+                        <span
+                          className="intel-content-editable"
+                          onClick={() => startEdit(item)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(item); } }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Edit finding: ${item.content.substring(0, 50)}. Press Enter or Space to edit.`}
+                          title="Click to edit"
+                        >
                           {item.content}
                         </span>
                       )}
-                      <span className="intel-time-small">[{item.timestamp}]</span>
+                      <span className="intel-time-small" aria-label={`Timestamp: ${item.timestamp}`}>[{item.timestamp}]</span>
                       <button
                         className={`btn-copy ${copiedId === item.id ? 'copied' : ''}`}
                         onClick={() => handleCopy(item.content, item.id)}
+                        aria-label={copiedId === item.id ? `Finding copied: ${item.content.substring(0, 30)}` : `Copy finding: ${item.content.substring(0, 30)}`}
                         title="Copy finding"
                       >
                         {copiedId === item.id ? 'COPIED' : 'COPY'}
                       </button>
-                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding" aria-label={`Delete finding: ${item.content.substring(0, 30)}`}>{'\u2715'}</button>
+                      <button
+                        className="intel-delete-btn"
+                        onClick={() => onDeleteIntelligence(item.id)}
+                        title="Remove finding"
+                        aria-label={`Delete finding: ${item.content.substring(0, 30)}`}
+                      >
+                        {'\u2715'}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -239,24 +269,26 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
 
       {/* Footer with delete + back + copy */}
       <div className="dossier-footer">
-        <div className="dossier-warning">
+        <div className="dossier-warning" role="note">
           {'\u{26A0}'} Session data is encrypted and stored locally. Deleting is permanent.
         </div>
         <div className="dossier-footer-actions">
-          <button className="btn-back-case" onClick={onBack}>
+          <button className="btn-back-case" onClick={onBack} aria-label="Back to case detail">
             BACK TO CASE
           </button>
           <button
             className={`btn-copy-dossier ${copiedId === 'dossier' ? 'copied' : ''}`}
             onClick={() => handleCopy(dossierText, 'dossier')}
+            aria-label={copiedId === 'dossier' ? 'Dossier copied to clipboard' : 'Copy full dossier to clipboard'}
           >
             {copiedId === 'dossier' ? 'COPIED' : 'COPY DOSSIER'}
           </button>
           <button
             className={`btn-destroy ${confirmDelete ? 'btn-destroy-confirm' : ''}`}
             onClick={handleDelete}
+            aria-label={confirmDelete ? `Confirm delete session, resets in ${deleteCountdown} seconds` : 'Delete session'}
           >
-            {confirmDelete ? 'CONFIRM: DELETE SESSION' : 'DELETE SESSION'}
+            {confirmDelete ? `CONFIRM: DELETE SESSION (${deleteCountdown}s)` : 'DELETE SESSION'}
           </button>
         </div>
       </div>

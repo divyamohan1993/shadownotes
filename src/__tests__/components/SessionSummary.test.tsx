@@ -154,7 +154,7 @@ describe('SessionSummary', () => {
     fireEvent.click(screen.getByText('DELETE SESSION'));
 
     // Should show confirmation text
-    expect(screen.getByText('CONFIRM: DELETE SESSION')).toBeInTheDocument();
+    expect(screen.getByText(/CONFIRM: DELETE SESSION/)).toBeInTheDocument();
     // Should NOT have called onDeleteSession yet
     expect(mockOnDeleteSession).not.toHaveBeenCalled();
   });
@@ -166,7 +166,7 @@ describe('SessionSummary', () => {
     fireEvent.click(screen.getByText('DELETE SESSION'));
     // Second click: actually delete
     await act(async () => {
-      fireEvent.click(screen.getByText('CONFIRM: DELETE SESSION'));
+      fireEvent.click(screen.getByText(/CONFIRM: DELETE SESSION/));
     });
 
     expect(mockOnDeleteSession).toHaveBeenCalledTimes(1);
@@ -181,7 +181,7 @@ describe('SessionSummary', () => {
     renderSummary();
 
     fireEvent.click(screen.getByText('DELETE SESSION'));
-    expect(screen.getByText('CONFIRM: DELETE SESSION')).toBeInTheDocument();
+    expect(screen.getByText(/CONFIRM: DELETE SESSION/)).toBeInTheDocument();
 
     // Advance past 5 second timeout
     await act(async () => {

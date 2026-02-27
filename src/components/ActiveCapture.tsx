@@ -10,6 +10,74 @@ import { startVoskCapture, preloadModel, type VoskSession } from '../voskEngine'
 import { generateWithOllama, checkOllamaAvailability } from '../ollamaEngine';
 import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
 
+// RunAnywhere SDK hooks — these are created by parallel agents and may not exist yet.
+// Each import is wrapped in a try-safe pattern: the hooks themselves return safe defaults
+// when the underlying SDK features are unavailable, so the UI degrades gracefully.
+let useAudioPipeline: () => {
+  isAvailable: boolean;
+  isCapturing: boolean;
+  isTranscribing: boolean;
+  vadActive: boolean;
+  audioLevel: number;
+  startCapture: () => Promise<void>;
+  stopCapture: () => void;
+  getInterimTranscript: () => string;
+  error: string | null;
+};
+let useTTS: () => {
+  isAvailable: boolean;
+  isSpeaking: boolean;
+  speak: (text: string) => void;
+  stop: () => void;
+};
+let useEmbeddings: () => {
+  isAvailable: boolean;
+  deduplicate: (items: IntelligenceItem[], threshold?: number) => Promise<IntelligenceItem[]>;
+  findSimilar: (query: string, items: IntelligenceItem[], topK?: number) => Promise<IntelligenceItem[]>;
+};
+let extractWithTools: (text: string, domain: DomainProfile, systemPrompt: string) => Promise<IntelligenceItem[]>;
+
+// Graceful dynamic imports — fall back to no-op stubs if modules are not yet available
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ useAudioPipeline } = require('../hooks/useAudioPipeline'));
+} catch {
+  useAudioPipeline = () => ({
+    isAvailable: false, isCapturing: false, isTranscribing: false,
+    vadActive: false, audioLevel: 0,
+    startCapture: async () => {}, stopCapture: () => {},
+    getInterimTranscript: () => '', error: null,
+  });
+}
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ useTTS } = require('../hooks/useTTS'));
+} catch {
+  useTTS = () => ({
+    isAvailable: false, isSpeaking: false,
+    speak: () => {}, stop: () => {},
+  });
+}
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ useEmbeddings } = require('../hooks/useEmbeddings'));
+} catch {
+  useEmbeddings = () => ({
+    isAvailable: false,
+    deduplicate: async (items: IntelligenceItem[]) => items,
+    findSimilar: async () => [],
+  });
+}
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ extractWithTools } = require('../toolExtraction'));
+} catch {
+  extractWithTools = async () => [];
+}
+
 const isElectron = !!(window as any).electronAPI?.isElectron || navigator.userAgent.includes('Electron');
 
 interface Props {
@@ -105,6 +173,11 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const llmBusyRef = useRef(false);
   const llmGenerationIdRef = useRef(0);
 
+  // --- RunAnywhere SDK hooks ---
+  const audioPipeline = useAudioPipeline();
+  const tts = useTTS();
+  const embeddings = useEmbeddings();
+
   // Keep refs in sync with state
   useEffect(() => { captureStateRef.current = captureState; }, [captureState]);
   useEffect(() => { llmReadyRef.current = llmState === 'ready'; }, [llmState]);
@@ -144,13 +217,16 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     }
   }, [perfConfig.ollamaEnabled]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount — stop all capture engines and TTS
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
       voskSessionRef.current?.stop();
       extractionAbortRef.current?.abort();
+      try { tts.stop(); } catch { /* safe to ignore if TTS not initialized */ }
+      try { audioPipeline.stopCapture(); } catch { /* safe to ignore */ }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Build the extraction prompt, optionally with prior session context
@@ -199,13 +275,22 @@ Example:
     }
   }, [perfConfig.ollamaModel, buildPrompt]);
 
-  // LLM extraction — streaming with Ollama cascade
+  // LLM extraction — streaming with Ollama cascade + tool extraction + embeddings dedup
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
     if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
 
     // Ollama primary: if enabled and available, skip embedded LLM entirely
     if (perfConfig.ollamaEnabled && ollamaAvailable) {
-      return tryOllamaExtraction(text, domain);
+      const ollamaItems = await tryOllamaExtraction(text, domain);
+      // Deduplicate via embeddings if available
+      if (ollamaItems.length > 0 && embeddings.isAvailable) {
+        try {
+          return await embeddings.deduplicate(ollamaItems);
+        } catch (err) {
+          console.warn('[ShadowNotes] Embeddings dedup failed for Ollama results:', err);
+        }
+      }
+      return ollamaItems;
     }
 
     const myId = ++llmGenerationIdRef.current;
@@ -245,6 +330,8 @@ Example:
 
       if (llmGenerationIdRef.current !== myId) return [];
 
+      let items: IntelligenceItem[] = [];
+
       // Try StructuredOutput JSON extraction if response looks like JSON
       if (hasStructuredSupport && accumulated.includes('{')) {
         try {
@@ -254,7 +341,7 @@ Example:
             if (Array.isArray(parsed)) {
               const typed = parsed as Array<{ category: string; content: string }>;
               const timestamp = getTimestamp();
-              return typed
+              items = typed
                 .filter(item => item.category && item.content)
                 .map(item => ({
                   id: crypto.randomUUID(),
@@ -269,7 +356,21 @@ Example:
         }
       }
 
-      return parseLLMResponse(accumulated, domain.categories);
+      // Fall back to line-based parsing if structured extraction yielded nothing
+      if (items.length === 0) {
+        items = parseLLMResponse(accumulated, domain.categories);
+      }
+
+      // Deduplicate via embeddings if available
+      if (items.length > 0 && embeddings.isAvailable) {
+        try {
+          items = await embeddings.deduplicate(items);
+        } catch (err) {
+          console.warn('[ShadowNotes] Embeddings dedup failed:', err);
+        }
+      }
+
+      return items;
     } catch (err) {
       if (err instanceof Error && err.message === 'LLM_TIMEOUT') {
         console.warn('[ShadowNotes] Embedded LLM timed out — trying Ollama fallback');
@@ -283,17 +384,50 @@ Example:
       llmBusyRef.current = false;
       setStreamingText('');
     }
-  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt]);
+  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt, embeddings]);
 
-  // Shared extraction: try LLM first, fall back to keywords
+  // Shared extraction: try LLM first, then tool extraction, then fall back to keywords
   const extractWithFallback = useCallback(async (text: string): Promise<IntelligenceItem[]> => {
     if (!text) return [];
+
+    // Primary path: LLM streaming extraction
     if (perfConfig.llmEnabled && llmReadyRef.current) {
       const llmItems = await tryLLMExtraction(text, session.domain);
       if (llmItems.length > 0) return llmItems;
     }
+
+    // Secondary path: tool-based extraction via RunAnywhere SDK ToolCalling
+    try {
+      const toolItems = await extractWithTools(text, session.domain, session.domain.systemPrompt);
+      if (toolItems.length > 0) {
+        // Deduplicate tool-extracted items if embeddings are available
+        if (embeddings.isAvailable) {
+          try {
+            return await embeddings.deduplicate(toolItems);
+          } catch (err) {
+            console.warn('[ShadowNotes] Embeddings dedup failed for tool extraction:', err);
+          }
+        }
+        return toolItems;
+      }
+    } catch (err) {
+      console.warn('[ShadowNotes] Tool extraction failed:', err);
+    }
+
+    // Tertiary fallback: keyword-based extraction (always works, zero dependencies)
     return extractIntelligence(text, session.domain.id);
-  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain]);
+  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain, embeddings]);
+
+  // TTS voice feedback after extraction completes
+  const speakExtractionSummary = useCallback((itemCount: number) => {
+    if (!tts.isAvailable || itemCount === 0) return;
+    try {
+      const noun = itemCount === 1 ? 'finding' : 'findings';
+      tts.speak(`Extracted ${itemCount} ${noun}`);
+    } catch (err) {
+      console.warn('[ShadowNotes] TTS feedback failed:', err);
+    }
+  }, [tts]);
 
   const startEdit = useCallback((item: IntelligenceItem) => {
     setEditingId(item.id);
@@ -473,11 +607,14 @@ Example:
     requestAnimationFrame(() => {
       setTimeout(async () => {
         const items = await extractWithFallback(fullText);
-        if (!abort.signal.aborted && items.length > 0) onAddIntelligence(items);
+        if (!abort.signal.aborted && items.length > 0) {
+          onAddIntelligence(items);
+          speakExtractionSummary(items.length);
+        }
         if (!abort.signal.aborted) setCaptureState('idle');
       }, 500);
     });
-  }, [flushAccumulated, extractWithFallback, onAddIntelligence]);
+  }, [flushAccumulated, extractWithFallback, onAddIntelligence, speakExtractionSummary]);
 
   // Text mode: submit typed notes through extraction pipeline
   const handleTextSubmit = useCallback(async () => {
@@ -489,11 +626,14 @@ Example:
     setIsTextExtracting(true);
     try {
       const items = await extractWithFallback(text);
-      if (items.length > 0) onAddIntelligence(items);
+      if (items.length > 0) {
+        onAddIntelligence(items);
+        speakExtractionSummary(items.length);
+      }
     } finally {
       setIsTextExtracting(false);
     }
-  }, [textInput, extractWithFallback, onAddTranscript, onAddIntelligence]);
+  }, [textInput, extractWithFallback, onAddTranscript, onAddIntelligence, speakExtractionSummary]);
 
   const handleEndSession = useCallback(async () => {
     if (recognitionRef.current) {
@@ -503,6 +643,8 @@ Example:
     voskSessionRef.current?.stop();
     voskSessionRef.current = null;
     extractionAbortRef.current?.abort();
+    // Stop TTS if speaking during session end
+    try { tts.stop(); } catch { /* safe */ }
     const fullText = flushAccumulated();
     if (fullText) {
       // Await extraction before ending session to avoid post-unmount state updates
@@ -510,12 +652,13 @@ Example:
       if (items.length > 0) onAddIntelligence(items);
     }
     onEndSession();
-  }, [flushAccumulated, extractWithFallback, onAddIntelligence, onEndSession]);
+  }, [flushAccumulated, extractWithFallback, onAddIntelligence, onEndSession, tts]);
 
   const handleDiscard = useCallback(() => {
     extractionAbortRef.current?.abort();
+    try { tts.stop(); } catch { /* safe */ }
     onDiscardSession?.();
-  }, [onDiscardSession]);
+  }, [onDiscardSession, tts]);
 
   // Group intelligence by category (memoized)
   const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
@@ -524,10 +667,11 @@ Example:
     return acc;
   }, {}), [session.intelligence]);
 
-  // LLM status label
+  // LLM status label — enhanced with audio pipeline awareness
   const llmStatusLabel = (() => {
     if (captureState === 'extracting' || isTextExtracting) return 'AI: DECODING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
+    if (audioPipeline.isAvailable && audioPipeline.isTranscribing) return 'AI: TRANSCRIBING';
     if (perfConfig.ollamaEnabled && ollamaAvailable) return 'AI: OLLAMA';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
@@ -537,6 +681,9 @@ Example:
       default: return 'AI: PENDING';
     }
   })();
+
+  // Determine whether to show real audio levels from the pipeline vs CSS animation
+  const useRealVAD = audioPipeline.isAvailable && captureState === 'listening';
 
   return (
     <div className="capture-screen" role="main" aria-label="Intelligence capture session">
@@ -553,6 +700,16 @@ Example:
             <div className={`status-dot ${captureState === 'extracting' || isTextExtracting ? 'status-extracting' : (llmState === 'ready' || (perfConfig.ollamaEnabled && ollamaAvailable)) ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
+
+          {/* SDK feature status badges */}
+          <div className="sdk-status" aria-label="SDK features status">
+            <span className={`sdk-badge ${llmState === 'ready' ? 'active' : ''}`} title="Language Model">LLM</span>
+            <span className={`sdk-badge ${audioPipeline.isAvailable ? 'active' : ''}`} title="Speech-to-Text">STT</span>
+            <span className={`sdk-badge ${audioPipeline.isAvailable ? 'active' : ''}`} title="Voice Activity Detection">VAD</span>
+            <span className={`sdk-badge ${tts.isAvailable ? 'active' : ''}`} title="Text-to-Speech">TTS</span>
+            <span className={`sdk-badge ${embeddings.isAvailable ? 'active' : ''}`} title="Embeddings">EMB</span>
+          </div>
+
           {onShowVoiceHelp && (
             <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands" aria-label="Show voice command help">?</button>
           )}
@@ -628,13 +785,21 @@ Example:
             {captureMode === 'voice' ? (
               <>
                 {perfConfig.vadBarCount > 0 && (
-                  <div className="vad-indicator" data-state={captureState}>
+                  <div className="vad-indicator" data-state={captureState} aria-label={useRealVAD && audioPipeline.vadActive ? 'Voice detected' : 'Awaiting voice input'}>
                     <div className="vad-bars">
                       {Array.from({ length: perfConfig.vadBarCount }).map((_, i) => (
                         <div
                           key={i}
-                          className={`vad-bar ${captureState === 'listening' && perfConfig.animationsEnabled ? 'vad-bar-active' : ''}`}
-                          style={perfConfig.animationsEnabled ? { animationDelay: `${i * 0.08}s` } : undefined}
+                          className={`vad-bar ${
+                            useRealVAD
+                              ? (audioPipeline.vadActive ? 'vad-bar-active' : '')
+                              : (captureState === 'listening' && perfConfig.animationsEnabled ? 'vad-bar-active' : '')
+                          }`}
+                          style={
+                            useRealVAD
+                              ? { height: `${Math.min(100, audioPipeline.audioLevel * 100 * (1 + i * 0.1))}%` }
+                              : (perfConfig.animationsEnabled ? { animationDelay: `${i * 0.08}s` } : undefined)
+                          }
                         />
                       ))}
                     </div>
@@ -722,6 +887,7 @@ Example:
                         className="intel-add-btn"
                         onClick={() => startManualAdd(cat)}
                         title={`Add ${cat} finding`}
+                        aria-label={`Add new ${cat} finding`}
                       >
                         + ADD
                       </button>
@@ -739,11 +905,12 @@ Example:
                           if (e.key === 'Enter') { e.preventDefault(); saveManualAdd(); }
                           else if (e.key === 'Escape') cancelManualAdd();
                         }}
+                        aria-label={`New ${cat} finding text`}
                         autoFocus
                       />
                       <div className="intel-add-actions">
-                        <button className="intel-add-save" onClick={saveManualAdd}>SAVE</button>
-                        <button className="intel-add-cancel" onClick={cancelManualAdd}>{'\u2715'}</button>
+                        <button className="intel-add-save" onClick={saveManualAdd} aria-label={`Save ${cat} finding`}>SAVE</button>
+                        <button className="intel-add-cancel" onClick={cancelManualAdd} aria-label={`Cancel adding ${cat} finding`}>{'\u2715'}</button>
                       </div>
                     </div>
                   )}
@@ -758,14 +925,30 @@ Example:
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } else if (e.key === 'Escape') cancelEdit(); }}
                           onBlur={saveEdit}
+                          aria-label={`Editing finding: ${item.content}`}
                           autoFocus
                         />
                       ) : (
-                        <span className="intel-content intel-content-editable" onClick={() => startEdit(item)} title="Click to edit">
+                        <span
+                          className="intel-content intel-content-editable"
+                          onClick={() => startEdit(item)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(item); } }}
+                          title="Click to edit"
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Edit finding: ${item.content}`}
+                        >
                           {item.content}
                         </span>
                       )}
-                      <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
+                      <button
+                        className="intel-delete-btn"
+                        onClick={() => onDeleteIntelligence(item.id)}
+                        title="Remove finding"
+                        aria-label="Delete finding"
+                      >
+                        {'\u2715'}
+                      </button>
                     </div>
                   ))}
 
@@ -782,9 +965,9 @@ Example:
       </div>
 
       {error && (
-        <div className="capture-error">
+        <div className="capture-error" role="alert">
           <span>[ERROR]</span> {error}
-          <button onClick={() => setError(null)}>{'\u2715'}</button>
+          <button onClick={() => setError(null)} aria-label="Dismiss error">{'\u2715'}</button>
         </div>
       )}
     </div>

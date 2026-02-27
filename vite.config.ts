@@ -63,7 +63,7 @@ export default defineConfig({
             includeAssets: ['icons/**/*'],
             workbox: {
               globPatterns: ['**/*.{js,css,html,wasm,ico,png,svg,woff,woff2}'],
-              maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+              maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
               runtimeCaching: [
                 {
                   urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

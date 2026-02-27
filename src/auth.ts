@@ -5,6 +5,15 @@ const RP_NAME = 'ShadowNotes';
 const USER_ID = new TextEncoder().encode('shadownotes-vault-user-v1');
 const PRF_SALT = new TextEncoder().encode('shadownotes-prf-salt-v1');
 
+/**
+ * Check whether the WebAuthn PRF extension is likely supported on this device.
+ *
+ * Returns `true` if the browser exposes the Web Authentication API and a
+ * user-verifying platform authenticator is available. Note: actual PRF support
+ * can only be confirmed after a `create()` call.
+ *
+ * @returns `true` if platform authenticator is available, `false` otherwise.
+ */
 export async function isPRFSupported(): Promise<boolean> {
   try {
     if (!navigator.credentials || !window.PublicKeyCredential) return false;
@@ -15,6 +24,19 @@ export async function isPRFSupported(): Promise<boolean> {
   }
 }
 
+/**
+ * Register a new WebAuthn credential and derive key material.
+ *
+ * If the authenticator supports the PRF extension, the returned `keyMaterial`
+ * is the PRF output (deterministic per credential + salt). Otherwise, random
+ * 32-byte key material is generated and the caller should persist it -- biometric
+ * authentication gates access at unlock time.
+ *
+ * @returns An object containing:
+ *   - `credentialId` -- Base64-encoded credential ID for future authentication.
+ *   - `keyMaterial`  -- 32 bytes of key material for vault key derivation.
+ *   - `prfAvailable` -- Whether the PRF extension was used.
+ */
 export async function registerCredential(): Promise<{ credentialId: string; keyMaterial: Uint8Array; prfAvailable: boolean }> {
   const credential = await navigator.credentials.create({
     publicKey: {
@@ -43,7 +65,7 @@ export async function registerCredential(): Promise<{ credentialId: string; keyM
     };
   }
 
-  // PRF not supported — generate random key material (biometric auth is the gate)
+  // PRF not supported -- generate random key material (biometric auth is the gate)
   const keyMaterial = crypto.getRandomValues(new Uint8Array(32));
   return {
     credentialId: bufferToBase64(credential.rawId),
@@ -52,6 +74,18 @@ export async function registerCredential(): Promise<{ credentialId: string; keyM
   };
 }
 
+/**
+ * Authenticate with an existing WebAuthn credential and recover key material.
+ *
+ * Tries the PRF extension first. If the authenticator does not support PRF,
+ * falls back to `storedKeyMaterial` (base64-encoded) that was persisted during
+ * registration. Throws `'PRF_AUTH_FAILED'` if neither source is available.
+ *
+ * @param credentialId      - Base64-encoded credential ID from registration.
+ * @param storedKeyMaterial - Optional base64-encoded key material persisted as fallback.
+ * @returns 32 bytes of key material for vault key derivation.
+ * @throws {Error} With message `'PRF_AUTH_FAILED'` if key material cannot be recovered.
+ */
 export async function authenticateCredential(credentialId: string, storedKeyMaterial?: string): Promise<Uint8Array> {
   const credential = await navigator.credentials.get({
     publicKey: {
@@ -67,7 +101,7 @@ export async function authenticateCredential(credentialId: string, storedKeyMate
     },
   }) as PublicKeyCredential;
 
-  // Biometric auth succeeded — try PRF first, fall back to stored key
+  // Biometric auth succeeded -- try PRF first, fall back to stored key
   const prfResults = (credential.getClientExtensionResults() as any).prf;
   if (prfResults?.results?.first) {
     return new Uint8Array(prfResults.results.first);
@@ -78,10 +112,26 @@ export async function authenticateCredential(credentialId: string, storedKeyMate
   throw new Error('PRF_AUTH_FAILED');
 }
 
+/**
+ * Convert an ArrayBuffer to a base64 string.
+ *
+ * Uses a chunked approach to avoid `RangeError: Maximum call stack size exceeded`
+ * that occurs with `String.fromCharCode(...largeArray)` on large buffers.
+ */
 function bufferToBase64(buffer: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const bytes = new Uint8Array(buffer);
+  const CHUNK_SIZE = 8192;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  return btoa(binary);
 }
 
+/**
+ * Convert a base64 string back to an ArrayBuffer.
+ */
 function base64ToBuffer(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);

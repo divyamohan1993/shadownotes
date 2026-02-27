@@ -365,6 +365,57 @@ export class VaultDB {
     });
   }
 
+  async updateSessionFull(id: string, updates: {
+    duration: number;
+    segmentCount: number;
+    findingCount: number;
+    sizeBytes: number;
+    encrypted: ArrayBuffer;
+  }): Promise<void> {
+    const db = this.ensureDb();
+    const oldSession = await this.getSession(id);
+    if (!oldSession) throw new Error(`Session ${id} not found`);
+    const sizeDiff = updates.sizeBytes - oldSession.sizeBytes;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['sessions', 'cases', 'meta'], 'readwrite');
+      const sessionsStore = tx.objectStore('sessions');
+      const casesStore = tx.objectStore('cases');
+      const metaStore = tx.objectStore('meta');
+
+      const updated: VaultSession = {
+        ...oldSession,
+        duration: updates.duration,
+        segmentCount: updates.segmentCount,
+        findingCount: updates.findingCount,
+        sizeBytes: updates.sizeBytes,
+        encrypted: updates.encrypted,
+      };
+      sessionsStore.put(updated);
+
+      // Bump case updatedAt
+      const caseReq = casesStore.get(oldSession.caseId);
+      caseReq.onsuccess = () => {
+        const c = caseReq.result as VaultCase | undefined;
+        if (c) {
+          c.updatedAt = Date.now();
+          casesStore.put(c);
+        }
+      };
+
+      if (sizeDiff !== 0) {
+        const metaReq = metaStore.get('total_size');
+        metaReq.onsuccess = () => {
+          const current = (metaReq.result?.value as number) ?? 0;
+          metaStore.put({ key: 'total_size', value: Math.max(0, current + sizeDiff) });
+        };
+      }
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   async updateSessionEncrypted(id: string, encrypted: ArrayBuffer, sizeBytes: number): Promise<void> {
     const db = this.ensureDb();
 

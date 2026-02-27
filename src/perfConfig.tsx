@@ -6,6 +6,9 @@ export interface PerfConfig {
   maxTokens: number;
   temperature: number;
   extractionDebounceMs: number;
+  // Ollama (Electron only)
+  ollamaEnabled: boolean;
+  ollamaModel: string;
   // Speech
   interimThrottleMs: number;
   // Rendering
@@ -14,12 +17,16 @@ export interface PerfConfig {
   timerUpdateMs: number;
 }
 
+const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron');
+
 export const PERF_PRESETS: Record<string, PerfConfig> = {
   High: {
     llmEnabled: true,
     maxTokens: 150,
     temperature: 0.3,
     extractionDebounceMs: 800,
+    ollamaEnabled: false,
+    ollamaModel: 'gemma3:1b',
     interimThrottleMs: 0,
     animationsEnabled: true,
     vadBarCount: 12,
@@ -30,6 +37,8 @@ export const PERF_PRESETS: Record<string, PerfConfig> = {
     maxTokens: 100,
     temperature: 0.3,
     extractionDebounceMs: 1500,
+    ollamaEnabled: false,
+    ollamaModel: 'gemma3:1b',
     interimThrottleMs: 200,
     animationsEnabled: true,
     vadBarCount: 4,
@@ -40,6 +49,8 @@ export const PERF_PRESETS: Record<string, PerfConfig> = {
     maxTokens: 0,
     temperature: 0.3,
     extractionDebounceMs: 2000,
+    ollamaEnabled: false,
+    ollamaModel: 'gemma3:1b',
     interimThrottleMs: 500,
     animationsEnabled: false,
     vadBarCount: 0,
@@ -187,6 +198,26 @@ export function DebugPanel({ autoLockMs, onAutoLockChange }: { autoLockMs?: numb
               <input type="range" min={200} max={5000} step={100} value={config.extractionDebounceMs} onChange={(e) => update('extractionDebounceMs', +e.target.value)} />
               <span className="debug-value">{config.extractionDebounceMs}ms</span>
             </label>
+            {isElectron && (
+              <>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '0.4rem 0' }} />
+                <label className="debug-row">
+                  <span>Ollama (Local)</span>
+                  <input type="checkbox" checked={config.ollamaEnabled} onChange={(e) => update('ollamaEnabled', e.target.checked)} />
+                </label>
+                {config.ollamaEnabled && (
+                  <label className="debug-row">
+                    <span>Model</span>
+                    <select className="debug-select" value={config.ollamaModel} onChange={(e) => update('ollamaModel', e.target.value)}>
+                      <option value="gemma3:1b">gemma3:1b</option>
+                      <option value="gemma3:4b">gemma3:4b</option>
+                      <option value="gemma3:12b">gemma3:12b</option>
+                      <option value="deepseek-r1:8b">deepseek-r1:8b</option>
+                    </select>
+                  </label>
+                )}
+              </>
+            )}
           </div>
 
           {/* Speech */}

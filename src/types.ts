@@ -28,6 +28,7 @@ export interface SessionData {
   startTime: Date;
   transcripts: TranscriptEntry[];
   intelligence: IntelligenceItem[];
+  priorContext?: string;
 }
 
 export interface VaultCase {

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(npx vite build)",
+      "Bash(npx tsc -b --noEmit)",
+      "Bash(npm run electron:package)"
     ]
   }
 }

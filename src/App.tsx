@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type MutableRefObject } from 'react';
 import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
@@ -17,6 +17,7 @@ import { isPRFSupported } from './auth';
 import { DOMAINS } from './domains';
 import { type VoiceCommand } from './voiceCommands';
 import { generateCaseNumber } from './domains';
+import { useAutoSave } from './hooks/useAutoSave';
 import type { AppScreen, SessionData, SessionContent, DomainProfile, TranscriptEntry, IntelligenceItem, VaultCase, VaultSession, SearchResult } from './types';
 
 interface ReviewState {
@@ -33,6 +34,27 @@ export function App() {
       </VaultProvider>
     </PerfProvider>
   );
+}
+
+const MAX_PRIOR_CONTEXT_CHARS = 2000;
+
+function buildPriorContextString(items: IntelligenceItem[]): string {
+  // Deduplicate by category + normalized content
+  const seen = new Map<string, IntelligenceItem>();
+  for (const item of items) {
+    const key = `${item.category}::${item.content.toLowerCase().trim()}`;
+    seen.set(key, item);
+  }
+
+  const lines: string[] = [];
+  let totalChars = 0;
+  for (const item of seen.values()) {
+    const line = `[${item.category}] ${item.content}`;
+    if (totalChars + line.length + 1 > MAX_PRIOR_CONTEXT_CHARS) break;
+    lines.push(line);
+    totalChars += line.length + 1;
+  }
+  return lines.join('\n');
 }
 
 function AppInner() {
@@ -56,6 +78,18 @@ function AppInner() {
 
   // Active session state (in-memory during recording)
   const [session, setSession] = useState<SessionData | null>(null);
+
+  // Auto-save
+  const saveHintRef = useRef<'immediate' | 'debounced' | null>(null);
+  const autoSave = useAutoSave(
+    session && currentCase ? {
+      caseId: currentCase.id,
+      caseNumber: session.caseNumber,
+      startTime: session.startTime,
+      saveDraft: vault.saveDraft,
+      updateDraft: vault.updateDraft,
+    } : null,
+  );
 
   // Storage warning
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
@@ -221,25 +255,35 @@ function AppInner() {
     await refreshStorageWarning();
   }, [vault, currentCase, refreshStorageWarning]);
 
-  // Start new recording session
-  const handleNewSession = useCallback(() => {
+  // Start new recording session (loads prior context from previous sessions)
+  const handleNewSession = useCallback(async () => {
     if (!currentDomain || !currentCase) return;
+    let priorContext: string | undefined;
+    try {
+      const priorItems = await vault.loadPriorContext(currentCase.id);
+      if (priorItems.length > 0) {
+        priorContext = buildPriorContextString(priorItems);
+      }
+    } catch { /* first session or decryption issue — proceed without context */ }
     setSession({
       domain: currentDomain,
       caseNumber: generateCaseNumber(),
       startTime: new Date(),
       transcripts: [],
       intelligence: [],
+      priorContext,
     });
     setScreen('capture');
-  }, [currentDomain, currentCase]);
+  }, [currentDomain, currentCase, vault]);
 
-  // Session data handlers (in-memory)
+  // Session data handlers (in-memory + auto-save hints)
   const addTranscript = useCallback((entry: TranscriptEntry) => {
+    saveHintRef.current = 'immediate';
     setSession((prev) => prev ? { ...prev, transcripts: [...prev.transcripts, entry] } : null);
   }, []);
 
   const updateLastTranscript = useCallback((entry: TranscriptEntry) => {
+    saveHintRef.current = 'immediate';
     setSession((prev) => {
       if (!prev || prev.transcripts.length === 0) return prev;
       const updated = [...prev.transcripts];
@@ -249,10 +293,12 @@ function AppInner() {
   }, []);
 
   const addIntelligence = useCallback((items: IntelligenceItem[]) => {
+    saveHintRef.current = 'immediate';
     setSession((prev) => prev ? { ...prev, intelligence: [...prev.intelligence, ...items] } : null);
   }, []);
 
   const updateIntelligence = useCallback((id: string, newContent: string) => {
+    saveHintRef.current = 'debounced';
     setSession((prev) => {
       if (!prev) return null;
       return { ...prev, intelligence: prev.intelligence.map((item) => item.id === id ? { ...item, content: newContent } : item) };
@@ -260,33 +306,63 @@ function AppInner() {
   }, []);
 
   const deleteIntelligence = useCallback((id: string) => {
+    saveHintRef.current = 'debounced';
     setSession((prev) => {
       if (!prev) return null;
       return { ...prev, intelligence: prev.intelligence.filter((item) => item.id !== id) };
     });
   }, []);
 
-  // Save session to vault (encrypt + store)
-  const handleSaveSession = useCallback(async () => {
-    if (!session || !currentCase) return;
-    const duration = Math.floor((Date.now() - session.startTime.getTime()) / 1000);
+  // Auto-save: triggered by saveHintRef on session state changes
+  useEffect(() => {
+    if (!session || !saveHintRef.current) return;
     const content: SessionContent = {
       transcripts: session.transcripts,
       intelligence: session.intelligence,
     };
-    const sessionId = await vault.saveSession(currentCase.id, session.caseNumber, duration, content);
+    if (content.transcripts.length === 0 && content.intelligence.length === 0) return;
+    if (saveHintRef.current === 'immediate') {
+      autoSave.saveNow(content);
+    } else {
+      autoSave.saveDebounced(content);
+    }
+    saveHintRef.current = null;
+  }, [session, autoSave]);
+
+  // Save session to vault (finalize draft or create new)
+  const handleSaveSession = useCallback(async () => {
+    if (!session || !currentCase) return;
+    autoSave.cancel();
+    const content: SessionContent = {
+      transcripts: session.transcripts,
+      intelligence: session.intelligence,
+    };
+    let sessionId = autoSave.getDraftId();
+    if (sessionId) {
+      // Final update to existing draft
+      await vault.updateDraft(currentCase.id, sessionId, content, session.startTime);
+    } else {
+      // No draft yet — create normally
+      const duration = Math.floor((Date.now() - session.startTime.getTime()) / 1000);
+      sessionId = await vault.saveSession(currentCase.id, session.caseNumber, duration, content);
+    }
     const savedSession = await vault.listSessions(currentCase.id).then(ss => ss.find(s => s.id === sessionId));
-    setReview(savedSession ? { sessionId, content, session: savedSession } : null);
+    setReview(savedSession ? { sessionId: sessionId!, content, session: savedSession } : null);
     setSession(null);
     setScreen('summary');
     await refreshStorageWarning();
-  }, [session, currentCase, vault, refreshStorageWarning]);
+  }, [session, currentCase, vault, autoSave, refreshStorageWarning]);
 
-  // Discard session (don't save)
-  const handleDiscardSession = useCallback(() => {
+  // Discard session (delete draft if exists)
+  const handleDiscardSession = useCallback(async () => {
+    autoSave.cancel();
+    const draftId = autoSave.getDraftId();
+    if (draftId) {
+      await vault.deleteSession(draftId);
+    }
     setSession(null);
     setScreen('case-detail');
-  }, []);
+  }, [autoSave, vault]);
 
   // Open a saved session for review
   const handleOpenSession = useCallback(async (vaultSession: VaultSession) => {

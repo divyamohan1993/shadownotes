@@ -3,7 +3,7 @@ import { VaultDB } from './vault';
 import { StorageManager, formatSize, type StorageStatus } from './storage';
 import { deriveKeyFromBytes, deriveCaseKey, encryptContent, decryptContent, deriveKeyFromPassphrase } from './crypto';
 import { registerCredential, authenticateCredential } from './auth';
-import type { VaultCase, VaultSession, DomainId, SessionContent, SearchResult, ShadowExportBundle } from './types';
+import type { VaultCase, VaultSession, DomainId, SessionContent, SearchResult, ShadowExportBundle, IntelligenceItem } from './types';
 
 interface VaultContextValue {
   isUnlocked: boolean;
@@ -27,6 +27,9 @@ interface VaultContextValue {
   lock: () => void;
   pinCase: (id: string, pinned: boolean) => Promise<void>;
   searchAll: (query: string) => Promise<SearchResult[]>;
+  saveDraft: (caseId: string, caseNumber: string, content: SessionContent, startTime: Date) => Promise<string>;
+  updateDraft: (caseId: string, sessionId: string, content: SessionContent, startTime: Date) => Promise<void>;
+  loadPriorContext: (caseId: string) => Promise<IntelligenceItem[]>;
   exportCase: (caseId: string, exportPassword: string) => Promise<Blob>;
   importDossier: (file: File, importPassword: string) => Promise<number>;
 }
@@ -70,10 +73,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const existingCredId = await db.getMeta('credential_id');
     let keyMaterial: Uint8Array;
     if (existingCredId && typeof existingCredId === 'string') {
-      keyMaterial = await authenticateCredential(existingCredId);
+      const storedKey = await db.getMeta('stored_key_material') as string | undefined;
+      keyMaterial = await authenticateCredential(existingCredId, storedKey);
     } else {
       const result = await registerCredential();
       await db.setMeta('credential_id', result.credentialId);
+      if (!result.prfAvailable) {
+        // Store key material — biometric auth gates access at unlock time
+        const binary = String.fromCharCode(...result.keyMaterial);
+        await db.setMeta('stored_key_material', btoa(binary));
+      }
       keyMaterial = result.keyMaterial;
     }
     masterKeyRef.current = await deriveKeyFromBytes(keyMaterial);
@@ -121,6 +130,51 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     const caseKey = await deriveCaseKey(masterKey, caseId);
     const encrypted = await encryptContent(caseKey, content);
     await ensureDB().updateSessionEncrypted(sessionId, encrypted, encrypted.byteLength);
+  }, []);
+
+  const saveDraft = useCallback(async (caseId: string, caseNumber: string, content: SessionContent, startTime: Date): Promise<string> => {
+    const masterKey = ensureKey();
+    const caseKey = await deriveCaseKey(masterKey, caseId);
+    const encrypted = await encryptContent(caseKey, content);
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+    const sessionId = await ensureDB().createSession({
+      caseId, caseNumber, duration,
+      segmentCount: content.transcripts.length,
+      findingCount: content.intelligence.length,
+      sizeBytes: encrypted.byteLength,
+      encrypted,
+    });
+    if (storageRef.current) await storageRef.current.rotateIfNeeded(sessionId);
+    return sessionId;
+  }, []);
+
+  const updateDraft = useCallback(async (caseId: string, sessionId: string, content: SessionContent, startTime: Date): Promise<void> => {
+    const masterKey = ensureKey();
+    const caseKey = await deriveCaseKey(masterKey, caseId);
+    const encrypted = await encryptContent(caseKey, content);
+    const duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+    await ensureDB().updateSessionFull(sessionId, {
+      duration,
+      segmentCount: content.transcripts.length,
+      findingCount: content.intelligence.length,
+      sizeBytes: encrypted.byteLength,
+      encrypted,
+    });
+  }, []);
+
+  const loadPriorContext = useCallback(async (caseId: string): Promise<IntelligenceItem[]> => {
+    const masterKey = ensureKey();
+    const db = ensureDB();
+    const sessions = await db.listSessions(caseId);
+    const caseKey = await deriveCaseKey(masterKey, caseId);
+    const allIntel: IntelligenceItem[] = [];
+    for (const s of sessions) {
+      try {
+        const content = await decryptContent(caseKey, s.encrypted);
+        allIntel.push(...content.intelligence);
+      } catch { /* skip sessions that fail to decrypt */ }
+    }
+    return allIntel;
   }, []);
 
   const deleteSession = useCallback(async (sessionId: string) => ensureDB().deleteSession(sessionId), []);
@@ -254,6 +308,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       isUnlocked, authMethod, unlock, unlockWithPassphrase,
       listCases, createCase, deleteCase, findCase,
       listSessions, saveSession, loadSession, updateSession, deleteSession, getSessionCount,
+      saveDraft, updateDraft, loadPriorContext,
       getStorageStatus, rotateIfNeeded, formatSize, destroyVault,
       lock, pinCase, searchAll, exportCase, importDossier,
     }}>

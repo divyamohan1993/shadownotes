@@ -5,7 +5,11 @@ import { ModelCategory } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
 import { usePerfConfig } from '../perfConfig';
 import { parseVoiceCommand, type VoiceCommand } from '../voiceCommands';
+import { startVoskCapture, preloadModel, type VoskSession } from '../voskEngine';
+import { generateWithOllama, checkOllamaAvailability } from '../ollamaEngine';
 import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
+
+const isElectron = !!(window as any).electronAPI?.isElectron || navigator.userAgent.includes('Electron');
 
 interface Props {
   session: SessionData;
@@ -76,6 +80,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const { config: perfConfig } = usePerfConfig();
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const voskSessionRef = useRef<VoskSession | null>(null);
+  const [voskModelLoading, setVoskModelLoading] = useState(false);
+  const [ollamaAvailable, setOllamaAvailable] = useState(false);
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lastInterimUpdateRef = useRef(0);
@@ -116,43 +123,98 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight, behavior: 'smooth' });
   }, [session.transcripts, liveTranscript]);
 
+  // Preload Vosk model in Electron (so first capture is fast)
+  useEffect(() => {
+    if (isElectron) {
+      setVoskModelLoading(true);
+      preloadModel().finally(() => setVoskModelLoading(false));
+    }
+  }, []);
+
+  // Probe Ollama availability when enabled
+  useEffect(() => {
+    if (isElectron && perfConfig.ollamaEnabled) {
+      checkOllamaAvailability().then(setOllamaAvailable);
+    } else {
+      setOllamaAvailable(false);
+    }
+  }, [perfConfig.ollamaEnabled]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
+      voskSessionRef.current?.stop();
       extractionAbortRef.current?.abort();
     };
   }, []);
 
-  // LLM extraction — serialized with timeout
-  const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
-    if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
+  // Build the extraction prompt, optionally with prior session context
+  const buildPrompt = useCallback((text: string, domain: DomainProfile): { userPrompt: string; systemPrompt: string } => {
+    const catList = domain.categories.join(', ');
+    const hasPrior = !!session.priorContext;
+    let userPrompt = '';
 
-    const myId = ++llmGenerationIdRef.current;
-    llmBusyRef.current = true;
-    try {
-      const catList = domain.categories.join(', ');
-      const userPrompt = `Extract facts from this transcript. Use ONLY these categories: ${catList}
+    if (hasPrior) {
+      userPrompt += `Known facts from prior sessions in this case:\n${session.priorContext}\n\n`;
+    }
+
+    userPrompt += `Extract ${hasPrior ? 'NEW ' : ''}facts from this transcript. Use ONLY these categories: ${catList}
 
 Format each line exactly as: [Category] fact
 Example:
 [${domain.categories[0]}] example fact
-[${domain.categories[1]}] example fact
+[${domain.categories[1]}] example fact`;
 
-Transcript:
-${text}
+    if (hasPrior) {
+      userPrompt += `\n\nDo NOT repeat facts already listed above unless they have CHANGED.`;
+    }
 
-Extracted facts:`;
+    userPrompt += `\n\nTranscript:\n${text}\n\nExtracted facts:`;
+
+    let systemPrompt = domain.systemPrompt;
+    if (hasPrior) {
+      systemPrompt += '\n\nIMPORTANT: Known facts from prior sessions are provided. Do not repeat them unless they changed. Use them to resolve ambiguous references.';
+    }
+
+    return { userPrompt, systemPrompt };
+  }, [session.priorContext]);
+
+  // Ollama extraction helper
+  const tryOllamaExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
+    const { userPrompt, systemPrompt } = buildPrompt(text, domain);
+    try {
+      const { text: response } = await generateWithOllama(userPrompt, systemPrompt, perfConfig.ollamaModel);
+      return parseLLMResponse(response, domain.categories);
+    } catch (err) {
+      console.warn('[ShadowNotes] Ollama extraction failed:', err);
+      return [];
+    }
+  }, [perfConfig.ollamaModel, buildPrompt]);
+
+  // LLM extraction — serialized with Ollama cascade
+  const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
+    if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
+
+    // Ollama primary: if enabled and available, skip embedded LLM entirely
+    if (perfConfig.ollamaEnabled && ollamaAvailable) {
+      return tryOllamaExtraction(text, domain);
+    }
+
+    const myId = ++llmGenerationIdRef.current;
+    llmBusyRef.current = true;
+    try {
+      const { userPrompt, systemPrompt } = buildPrompt(text, domain);
 
       const generatePromise = TextGeneration.generate(userPrompt, {
-        systemPrompt: domain.systemPrompt,
+        systemPrompt,
         maxTokens: perfConfig.maxTokens,
         temperature: perfConfig.temperature,
         topP: 0.9,
       });
 
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('LLM_TIMEOUT')), 30_000),
+        setTimeout(() => reject(new Error('LLM_TIMEOUT')), 60_000),
       );
 
       const { text: response } = await Promise.race([generatePromise, timeoutPromise]);
@@ -160,13 +222,17 @@ Extracted facts:`;
       return parseLLMResponse(response, domain.categories);
     } catch (err) {
       if (err instanceof Error && err.message === 'LLM_TIMEOUT') {
-        console.warn('[ShadowNotes] LLM timed out — falling back to keyword extraction');
+        console.warn('[ShadowNotes] Embedded LLM timed out — trying Ollama fallback');
+        if (ollamaAvailable) {
+          const ollamaItems = await tryOllamaExtraction(text, domain);
+          if (ollamaItems.length > 0) return ollamaItems;
+        }
       }
       return [];
     } finally {
       llmBusyRef.current = false;
     }
-  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature]);
+  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt]);
 
   // Shared extraction: try LLM first, fall back to keywords
   const extractWithFallback = useCallback(async (text: string): Promise<IntelligenceItem[]> => {
@@ -231,9 +297,73 @@ Extracted facts:`;
     return text;
   }, []);
 
+  // Handle a final speech result (shared by both engines)
+  const handleFinalResult = useCallback((text: string) => {
+    if (!text) return;
+
+    const command = parseVoiceCommand(text);
+    if (command) {
+      onVoiceCommand?.(command);
+      return;
+    }
+
+    const now = Date.now();
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    const prev = lastFinalTextRef.current;
+    const timeSinceLast = now - lastFinalTimeRef.current;
+
+    const isRefinement = prev && timeSinceLast < 3000 && (
+      text.startsWith(prev) || prev.startsWith(text)
+    );
+
+    if (isRefinement) {
+      const longer = text.length >= prev.length ? text : prev;
+      onUpdateLastTranscript({ text: longer, timestamp });
+      lastFinalTextRef.current = longer;
+      const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
+      parts[parts.length - 1] = longer;
+      accumulatedTextRef.current = parts.join('\n');
+    } else {
+      onAddTranscript({ text, timestamp });
+      lastFinalTextRef.current = text;
+      accumulatedTextRef.current += (accumulatedTextRef.current ? '\n' : '') + text;
+    }
+    lastFinalTimeRef.current = now;
+    setLiveTranscript('');
+  }, [onAddTranscript, onUpdateLastTranscript, onVoiceCommand]);
+
+  // Handle interim/partial speech (shared by both engines)
+  const handleInterim = useCallback((text: string) => {
+    const now = Date.now();
+    if (perfConfig.interimThrottleMs <= 0 || now - lastInterimUpdateRef.current >= perfConfig.interimThrottleMs) {
+      lastInterimUpdateRef.current = now;
+      setLiveTranscript(text);
+    }
+  }, [perfConfig.interimThrottleMs]);
+
   const startCapture = useCallback(() => {
     setError(null);
 
+    if (isElectron) {
+      // Vosk local speech recognition (Electron)
+      setCaptureState('listening');
+      startVoskCapture({
+        onResult: handleFinalResult,
+        onPartial: handleInterim,
+        onError: (msg) => setError(`Speech engine: ${msg}`),
+        onStateChange: (state) => {
+          if (state === 'loading-model') setVoskModelLoading(true);
+          else setVoskModelLoading(false);
+        },
+      }).then((session) => {
+        voskSessionRef.current = session;
+      }).catch(() => {
+        setCaptureState('idle');
+      });
+      return;
+    }
+
+    // Web Speech API (Chrome/Edge on web)
     const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionCtor) {
       setError('Speech recognition not supported in this browser. Use Chrome, Edge, or Safari.');
@@ -251,50 +381,12 @@ Extracted facts:`;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          const text = result[0].transcript.trim();
-          if (!text) continue;
-
-          const command = parseVoiceCommand(text);
-          if (command) {
-            onVoiceCommand?.(command);
-            continue;
-          }
-
-          const now = Date.now();
-          const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
-          const prev = lastFinalTextRef.current;
-          const timeSinceLast = now - lastFinalTimeRef.current;
-
-          const isRefinement = prev && timeSinceLast < 3000 && (
-            text.startsWith(prev) || prev.startsWith(text)
-          );
-
-          if (isRefinement) {
-            const longer = text.length >= prev.length ? text : prev;
-            onUpdateLastTranscript({ text: longer, timestamp });
-            lastFinalTextRef.current = longer;
-            // Update last line in accumulated text
-            const parts = accumulatedTextRef.current.split('\n').filter(Boolean);
-            parts[parts.length - 1] = longer;
-            accumulatedTextRef.current = parts.join('\n');
-          } else {
-            onAddTranscript({ text, timestamp });
-            lastFinalTextRef.current = text;
-            accumulatedTextRef.current += (accumulatedTextRef.current ? '\n' : '') + text;
-          }
-          lastFinalTimeRef.current = now;
-          setLiveTranscript('');
+          handleFinalResult(result[0].transcript.trim());
         } else {
           interim += result[0].transcript;
         }
       }
-      if (interim) {
-        const now = Date.now();
-        if (perfConfig.interimThrottleMs <= 0 || now - lastInterimUpdateRef.current >= perfConfig.interimThrottleMs) {
-          lastInterimUpdateRef.current = now;
-          setLiveTranscript(interim);
-        }
-      }
+      if (interim) handleInterim(interim);
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
@@ -312,12 +404,14 @@ Extracted facts:`;
     recognition.start();
     recognitionRef.current = recognition;
     setCaptureState('listening');
-  }, [session.domain, onAddTranscript, onUpdateLastTranscript, perfConfig.interimThrottleMs, onVoiceCommand]);
+  }, [handleFinalResult, handleInterim]);
 
   // DECODE INTELLIGENCE: stop mic, animate, then extract
   const decodeIntelligence = useCallback(() => {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
+    voskSessionRef.current?.stop();
+    voskSessionRef.current = null;
     const fullText = flushAccumulated();
 
     setCaptureState('extracting');
@@ -355,6 +449,8 @@ Extracted facts:`;
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
+    voskSessionRef.current?.stop();
+    voskSessionRef.current = null;
     extractionAbortRef.current?.abort();
     const fullText = flushAccumulated();
     if (fullText) {
@@ -382,6 +478,7 @@ Extracted facts:`;
   const llmStatusLabel = (() => {
     if (captureState === 'extracting' || isTextExtracting) return 'AI: DECODING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
+    if (perfConfig.ollamaEnabled && ollamaAvailable) return 'AI: OLLAMA';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
       case 'loading': return 'AI: LOADING';
@@ -403,7 +500,7 @@ Extracted facts:`;
         </div>
         <div className="capture-header-right">
           <div className="status-indicator">
-            <div className={`status-dot ${captureState === 'extracting' || isTextExtracting ? 'status-extracting' : llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
+            <div className={`status-dot ${captureState === 'extracting' || isTextExtracting ? 'status-extracting' : (llmState === 'ready' || (perfConfig.ollamaEnabled && ollamaAvailable)) ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
           {onShowVoiceHelp && (
@@ -495,9 +592,9 @@ Extracted facts:`;
                 )}
 
                 {captureState === 'idle' ? (
-                  <button className="btn-capture" onClick={startCapture}>
+                  <button className="btn-capture" onClick={startCapture} disabled={voskModelLoading}>
                     <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
-                    BEGIN CAPTURE
+                    {voskModelLoading ? 'LOADING SPEECH MODEL...' : 'BEGIN CAPTURE'}
                   </button>
                 ) : captureState === 'extracting' ? (
                   <button className="btn-capture btn-capture-extracting" disabled>

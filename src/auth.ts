@@ -1,4 +1,6 @@
-const RP_ID = 'shadownotes.dmj.one';
+const RP_ID = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
+  ? 'localhost'
+  : 'shadownotes.dmj.one';
 const RP_NAME = 'ShadowNotes';
 const USER_ID = new TextEncoder().encode('shadownotes-vault-user-v1');
 const PRF_SALT = new TextEncoder().encode('shadownotes-prf-salt-v1');
@@ -13,7 +15,7 @@ export async function isPRFSupported(): Promise<boolean> {
   }
 }
 
-export async function registerCredential(): Promise<{ credentialId: string; keyMaterial: Uint8Array }> {
+export async function registerCredential(): Promise<{ credentialId: string; keyMaterial: Uint8Array; prfAvailable: boolean }> {
   const credential = await navigator.credentials.create({
     publicKey: {
       rp: { name: RP_NAME, id: RP_ID },
@@ -33,15 +35,24 @@ export async function registerCredential(): Promise<{ credentialId: string; keyM
   }) as PublicKeyCredential;
 
   const prfResults = (credential.getClientExtensionResults() as any).prf;
-  if (!prfResults?.results?.first) throw new Error('PRF_NOT_SUPPORTED');
+  if (prfResults?.results?.first) {
+    return {
+      credentialId: bufferToBase64(credential.rawId),
+      keyMaterial: new Uint8Array(prfResults.results.first),
+      prfAvailable: true,
+    };
+  }
 
+  // PRF not supported — generate random key material (biometric auth is the gate)
+  const keyMaterial = crypto.getRandomValues(new Uint8Array(32));
   return {
     credentialId: bufferToBase64(credential.rawId),
-    keyMaterial: new Uint8Array(prfResults.results.first),
+    keyMaterial,
+    prfAvailable: false,
   };
 }
 
-export async function authenticateCredential(credentialId: string): Promise<Uint8Array> {
+export async function authenticateCredential(credentialId: string, storedKeyMaterial?: string): Promise<Uint8Array> {
   const credential = await navigator.credentials.get({
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
@@ -56,9 +67,15 @@ export async function authenticateCredential(credentialId: string): Promise<Uint
     },
   }) as PublicKeyCredential;
 
+  // Biometric auth succeeded — try PRF first, fall back to stored key
   const prfResults = (credential.getClientExtensionResults() as any).prf;
-  if (!prfResults?.results?.first) throw new Error('PRF_AUTH_FAILED');
-  return new Uint8Array(prfResults.results.first);
+  if (prfResults?.results?.first) {
+    return new Uint8Array(prfResults.results.first);
+  }
+  if (storedKeyMaterial) {
+    return new Uint8Array(base64ToBuffer(storedKeyMaterial));
+  }
+  throw new Error('PRF_AUTH_FAILED');
 }
 
 function bufferToBase64(buffer: ArrayBuffer): string {

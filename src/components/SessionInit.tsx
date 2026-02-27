@@ -6,9 +6,11 @@ import type { DomainProfile, DomainId } from '../types';
 
 interface Props {
   onStart: (domain: DomainProfile) => void;
+  onSearch: () => void;
+  onImport: () => void;
 }
 
-export function SessionInit({ onStart }: Props) {
+export function SessionInit({ onStart, onSearch, onImport }: Props) {
   const [selected, setSelected] = useState<DomainId | null>(null);
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
 
@@ -88,9 +90,17 @@ export function SessionInit({ onStart }: Props) {
         OPEN CASE FILES
       </button>
 
-      <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-field-manual">
-        {'\u{1F4D6}'} FIELD MANUAL
-      </a>
+      <div className="init-actions-row">
+        <button className="btn-init-action" onClick={onSearch} title="Search all cases">
+          {'\u{1F50D}'} SEARCH VAULT
+        </button>
+        <button className="btn-init-action" onClick={onImport} title="Import .shadow file">
+          {'\u{1F4E5}'} IMPORT DOSSIER
+        </button>
+        <a href="/docs/field-manual.html" target="_blank" rel="noopener noreferrer" className="btn-init-action">
+          {'\u{1F4D6}'} FIELD MANUAL
+        </a>
+      </div>
 
       <div className="init-footer">
         <div className="status-dot status-secure" />

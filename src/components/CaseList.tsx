@@ -7,11 +7,13 @@ interface Props {
   onCreateCase: (name: string) => Promise<void>;
   onOpenCase: (caseItem: VaultCase) => void;
   onDeleteCase: (id: string) => Promise<void>;
+  onPinCase: (id: string, pinned: boolean) => Promise<void>;
   onBack: () => void;
+  onShowVoiceHelp: () => void;
   storageWarning: string | null;
 }
 
-export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDeleteCase, onBack, storageWarning }: Props) {
+export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDeleteCase, onPinCase, onBack, onShowVoiceHelp, storageWarning }: Props) {
   const [cases, setCases] = useState<VaultCase[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -44,6 +46,11 @@ export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDelete
     await refresh();
   };
 
+  const handlePin = async (id: string, pinned: boolean) => {
+    await onPinCase(id, pinned);
+    await refresh();
+  };
+
   const filtered = searchQuery
     ? cases.filter(c =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -53,7 +60,10 @@ export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDelete
   return (
     <div className="cases-screen">
       <header className="cases-header">
-        <button className="btn-back" onClick={onBack}>{'\u2190'} DOMAINS</button>
+        <div className="cases-header-top">
+          <button className="btn-back" onClick={onBack}>{'\u2190'} DOMAINS</button>
+          <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands">?</button>
+        </div>
         <div className="cases-title-row">
           <span className="domain-banner-icon">{domain.icon}</span>
           <h1 className="cases-title">{domain.codename}</h1>
@@ -103,8 +113,15 @@ export function CaseList({ domain, listCases, onCreateCase, onOpenCase, onDelete
           </div>
         )}
         {filtered.map((c) => (
-          <div key={c.id} className="case-card" onClick={() => onOpenCase(c)}>
+          <div key={c.id} className={`case-card ${c.pinned ? 'case-pinned' : ''}`} onClick={() => onOpenCase(c)}>
             <div className="case-card-header">
+              <button
+                className={`btn-pin-case ${c.pinned ? 'btn-pin-active' : ''}`}
+                onClick={(e) => { e.stopPropagation(); handlePin(c.id, !c.pinned); }}
+                title={c.pinned ? 'Unpin case' : 'Pin case'}
+              >
+                {c.pinned ? '\u2605' : '\u2606'}
+              </button>
               <span className="case-shortid">{c.shortId}</span>
               <button
                 className={`btn-delete-case ${confirmDeleteId === c.id ? 'btn-delete-confirm' : ''}`}

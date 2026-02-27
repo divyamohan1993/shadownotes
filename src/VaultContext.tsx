@@ -3,7 +3,7 @@ import { VaultDB } from './vault';
 import { StorageManager, formatSize, type StorageStatus } from './storage';
 import { deriveKeyFromBytes, deriveCaseKey, encryptContent, decryptContent, deriveKeyFromPassphrase } from './crypto';
 import { registerCredential, authenticateCredential } from './auth';
-import type { VaultCase, VaultSession, DomainId, SessionContent } from './types';
+import type { VaultCase, VaultSession, DomainId, SessionContent, SearchResult, ShadowExportBundle } from './types';
 
 interface VaultContextValue {
   isUnlocked: boolean;
@@ -24,6 +24,11 @@ interface VaultContextValue {
   rotateIfNeeded: (excludeSessionId?: string) => Promise<number>;
   formatSize: (bytes: number) => string;
   destroyVault: () => Promise<void>;
+  lock: () => void;
+  pinCase: (id: string, pinned: boolean) => Promise<void>;
+  searchAll: (query: string) => Promise<SearchResult[]>;
+  exportCase: (caseId: string, exportPassword: string) => Promise<Blob>;
+  importDossier: (file: File, importPassword: string) => Promise<number>;
 }
 
 const VaultContext = createContext<VaultContextValue | null>(null);
@@ -131,6 +136,108 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     return storageRef.current.rotateIfNeeded(excludeSessionId);
   }, []);
 
+  const lock = useCallback(() => {
+    masterKeyRef.current = null;
+    setIsUnlocked(false);
+    setAuthMethod(null);
+  }, []);
+
+  const pinCase = useCallback(async (id: string, pinned: boolean) => {
+    await ensureDB().pinCase(id, pinned);
+  }, []);
+
+  const searchAll = useCallback(async (query: string): Promise<SearchResult[]> => {
+    const masterKey = ensureKey();
+    const db = ensureDB();
+    const allCases = await db.getAllCases();
+    const results: SearchResult[] = [];
+    const q = query.toLowerCase();
+
+    for (const c of allCases) {
+      const sessions = await db.listSessions(c.id);
+      const caseKey = await deriveCaseKey(masterKey, c.id);
+      for (const s of sessions) {
+        try {
+          const content = await decryptContent(caseKey, s.encrypted);
+          for (const t of content.transcripts) {
+            if (t.text.toLowerCase().includes(q)) {
+              results.push({ type: 'transcript', case: c, session: s, excerpt: t.text, timestamp: t.timestamp });
+            }
+          }
+          for (const item of content.intelligence) {
+            if (item.content.toLowerCase().includes(q)) {
+              results.push({ type: 'intelligence', case: c, session: s, excerpt: item.content, category: item.category, timestamp: item.timestamp });
+            }
+          }
+        } catch { /* skip sessions that fail to decrypt */ }
+      }
+    }
+    return results;
+  }, []);
+
+  const exportCase = useCallback(async (caseId: string, exportPassword: string): Promise<Blob> => {
+    const masterKey = ensureKey();
+    const db = ensureDB();
+    const c = await db.getCase(caseId);
+    if (!c) throw new Error('Case not found');
+    const exportKey = await deriveKeyFromPassphrase(exportPassword);
+    const sessions = await db.listSessions(caseId);
+    const caseKey = await deriveCaseKey(masterKey, caseId);
+    const exportSessions = [];
+
+    for (const s of sessions) {
+      const content = await decryptContent(caseKey, s.encrypted);
+      const reEncrypted = await encryptContent(exportKey, content);
+      const bytes = new Uint8Array(reEncrypted);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const { encrypted: _, ...meta } = s;
+      exportSessions.push({ meta, encrypted: btoa(binary) });
+    }
+
+    const bundle: ShadowExportBundle = {
+      version: 1,
+      format: 'shadow-export-v1',
+      exportedAt: Date.now(),
+      cases: [{ case: c, sessions: exportSessions }],
+    };
+    return new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+  }, []);
+
+  const importDossier = useCallback(async (file: File, importPassword: string): Promise<number> => {
+    const masterKey = ensureKey();
+    const db = ensureDB();
+    const text = await file.text();
+    const bundle = JSON.parse(text) as ShadowExportBundle;
+    if (bundle.format !== 'shadow-export-v1') throw new Error('Invalid .shadow file format');
+    const importKey = await deriveKeyFromPassphrase(importPassword);
+    let imported = 0;
+
+    for (const exportCase of bundle.cases) {
+      const caseId = await db.createCase({ domainId: exportCase.case.domainId, name: exportCase.case.name });
+      const caseKey = await deriveCaseKey(masterKey, caseId);
+
+      for (const es of exportCase.sessions) {
+        const binary = atob(es.encrypted);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const content = await decryptContent(importKey, bytes.buffer);
+        const encrypted = await encryptContent(caseKey, content);
+        await db.createSession({
+          caseId,
+          caseNumber: es.meta.caseNumber,
+          duration: es.meta.duration,
+          segmentCount: es.meta.segmentCount,
+          findingCount: es.meta.findingCount,
+          sizeBytes: encrypted.byteLength,
+          encrypted,
+        });
+        imported++;
+      }
+    }
+    return imported;
+  }, []);
+
   const destroyVault = useCallback(async () => {
     const db = dbRef.current;
     if (db) db.close();
@@ -148,6 +255,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       listCases, createCase, deleteCase, findCase,
       listSessions, saveSession, loadSession, updateSession, deleteSession, getSessionCount,
       getStorageStatus, rotateIfNeeded, formatSize, destroyVault,
+      lock, pinCase, searchAll, exportCase, importDossier,
     }}>
       {children}
     </VaultContext.Provider>

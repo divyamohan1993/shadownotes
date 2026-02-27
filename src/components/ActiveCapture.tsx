@@ -17,9 +17,11 @@ interface Props {
   onEndSession: () => void;
   onDiscardSession?: () => void;
   onVoiceCommand?: (cmd: VoiceCommand) => void;
+  onShowVoiceHelp?: () => void;
 }
 
 type CaptureState = 'idle' | 'listening' | 'extracting';
+type CaptureMode = 'voice' | 'text';
 
 function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
   const items: IntelligenceItem[] = [];
@@ -44,8 +46,19 @@ function parseLLMResponse(response: string, categories: string[]): IntelligenceI
   return items;
 }
 
-export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onUpdateIntelligence, onDeleteIntelligence, onEndSession, onDiscardSession, onVoiceCommand }: Props) {
+function getRelativeTime(timestampStr: string, startTime: Date): string {
+  const [h, m, s] = timestampStr.split(':').map(Number);
+  const entrySecs = h * 3600 + m * 60 + s;
+  const startSecs = startTime.getHours() * 3600 + startTime.getMinutes() * 60 + startTime.getSeconds();
+  const diffS = Math.max(0, entrySecs - startSecs);
+  const mm = Math.floor(diffS / 60).toString().padStart(2, '0');
+  const ss = (diffS % 60).toString().padStart(2, '0');
+  return `+${mm}:${ss}`;
+}
+
+export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript, onAddIntelligence, onUpdateIntelligence, onDeleteIntelligence, onEndSession, onDiscardSession, onVoiceCommand, onShowVoiceHelp }: Props) {
   const [captureState, setCaptureState] = useState<CaptureState>('idle');
+  const [captureMode, setCaptureMode] = useState<CaptureMode>('voice');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState('00:00:00');
@@ -56,12 +69,17 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const [manualAddCategory, setManualAddCategory] = useState<string | null>(null);
   const [manualAddValue, setManualAddValue] = useState('');
 
+  // Text entry state
+  const [textInput, setTextInput] = useState('');
+  const [isTextExtracting, setIsTextExtracting] = useState(false);
+
   const { config: perfConfig } = usePerfConfig();
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const captureStateRef = useRef<CaptureState>('idle');
   const transcriptRef = useRef<HTMLDivElement>(null);
   const lastInterimUpdateRef = useRef(0);
+  const extractionAbortRef = useRef<AbortController | null>(null);
 
   // Transcript deduplication refs
   const lastFinalTextRef = useRef('');
@@ -100,7 +118,10 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => { recognitionRef.current?.abort(); };
+    return () => {
+      recognitionRef.current?.abort();
+      extractionAbortRef.current?.abort();
+    };
   }, []);
 
   // LLM extraction — serialized with timeout
@@ -300,22 +321,41 @@ Extracted facts:`;
     const fullText = flushAccumulated();
 
     setCaptureState('extracting');
+    const abort = new AbortController();
+    extractionAbortRef.current = abort;
 
     // Let animation frame render before starting heavy LLM work
     requestAnimationFrame(() => {
       setTimeout(async () => {
         const items = await extractWithFallback(fullText);
-        if (items.length > 0) onAddIntelligence(items);
-        setCaptureState('idle');
+        if (!abort.signal.aborted && items.length > 0) onAddIntelligence(items);
+        if (!abort.signal.aborted) setCaptureState('idle');
       }, 500);
     });
   }, [flushAccumulated, extractWithFallback, onAddIntelligence]);
+
+  // Text mode: submit typed notes through extraction pipeline
+  const handleTextSubmit = useCallback(async () => {
+    const text = textInput.trim();
+    if (!text) return;
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0];
+    onAddTranscript({ text, timestamp });
+    setTextInput('');
+    setIsTextExtracting(true);
+    try {
+      const items = await extractWithFallback(text);
+      if (items.length > 0) onAddIntelligence(items);
+    } finally {
+      setIsTextExtracting(false);
+    }
+  }, [textInput, extractWithFallback, onAddTranscript, onAddIntelligence]);
 
   const handleEndSession = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
     }
+    extractionAbortRef.current?.abort();
     const fullText = flushAccumulated();
     if (fullText) {
       // Fire-and-forget extraction on remaining text
@@ -326,6 +366,11 @@ Extracted facts:`;
     onEndSession();
   }, [flushAccumulated, extractWithFallback, onAddIntelligence, onEndSession]);
 
+  const handleDiscard = useCallback(() => {
+    extractionAbortRef.current?.abort();
+    onDiscardSession?.();
+  }, [onDiscardSession]);
+
   // Group intelligence by category (memoized)
   const groupedIntel = useMemo(() => session.intelligence.reduce<Record<string, IntelligenceItem[]>>((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
@@ -335,7 +380,7 @@ Extracted facts:`;
 
   // LLM status label
   const llmStatusLabel = (() => {
-    if (captureState === 'extracting') return 'AI: DECODING...';
+    if (captureState === 'extracting' || isTextExtracting) return 'AI: DECODING...';
     if (!perfConfig.llmEnabled) return 'AI: OFF';
     switch (llmState) {
       case 'downloading': return `AI: ${Math.round(llmProgress * 100)}%`;
@@ -358,11 +403,14 @@ Extracted facts:`;
         </div>
         <div className="capture-header-right">
           <div className="status-indicator">
-            <div className={`status-dot ${captureState === 'extracting' ? 'status-extracting' : llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
+            <div className={`status-dot ${captureState === 'extracting' || isTextExtracting ? 'status-extracting' : llmState === 'ready' ? 'status-secure' : 'status-loading'}`} />
             <span>{llmStatusLabel}</span>
           </div>
+          {onShowVoiceHelp && (
+            <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands">?</button>
+          )}
           {onDiscardSession && (
-            <button className="btn-discard" onClick={onDiscardSession}>DISCARD</button>
+            <button className="btn-discard" onClick={handleDiscard}>DISCARD</button>
           )}
           <button className="btn-end" onClick={handleEndSession}>
             END SESSION
@@ -376,7 +424,7 @@ Extracted facts:`;
         <span className="domain-banner-type">{session.domain.name}</span>
       </div>
 
-      {captureState === 'listening' && (
+      {captureState === 'listening' && captureMode === 'voice' && (
         <div className="dev-mode-banner">
           <span className="dev-mode-icon">{'\u26A0'}</span>
           <span className="dev-mode-text">
@@ -393,7 +441,7 @@ Extracted facts:`;
           </div>
 
           <div className="transcript-list" ref={transcriptRef}>
-            {session.transcripts.length === 0 && captureState === 'idle' && (
+            {session.transcripts.length === 0 && captureState === 'idle' && captureMode === 'voice' && (
               <div className="empty-state-capture">
                 <p>Begin capture to start recording</p>
               </div>
@@ -403,9 +451,15 @@ Extracted facts:`;
                 <p>Listening... speak now</p>
               </div>
             )}
+            {session.transcripts.length === 0 && captureMode === 'text' && captureState === 'idle' && (
+              <div className="empty-state-capture">
+                <p>Type your notes below and submit to extract intelligence</p>
+              </div>
+            )}
             {session.transcripts.map((t, i) => (
               <div key={i} className="transcript-entry">
                 <span className="transcript-time">[{t.timestamp}]</span>
+                <span className="transcript-time-rel">{getRelativeTime(t.timestamp, session.startTime)}</span>
                 <span className="transcript-text">{t.text}</span>
               </div>
             ))}
@@ -418,35 +472,71 @@ Extracted facts:`;
           </div>
 
           <div className="capture-controls">
-            {perfConfig.vadBarCount > 0 && (
-            <div className="vad-indicator" data-state={captureState}>
-              <div className="vad-bars">
-                {Array.from({ length: perfConfig.vadBarCount }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`vad-bar ${captureState === 'listening' && perfConfig.animationsEnabled ? 'vad-bar-active' : ''}`}
-                    style={perfConfig.animationsEnabled ? { animationDelay: `${i * 0.08}s` } : undefined}
-                  />
-                ))}
-              </div>
+            {/* Mode toggle */}
+            <div className="capture-mode-toggle">
+              <button className={`capture-mode-btn ${captureMode === 'voice' ? 'active' : ''}`} onClick={() => setCaptureMode('voice')}>MIC</button>
+              <button className={`capture-mode-btn ${captureMode === 'text' ? 'active' : ''}`} onClick={() => setCaptureMode('text')}>TEXT</button>
             </div>
-          )}
 
-            {captureState === 'idle' ? (
-              <button className="btn-capture" onClick={startCapture}>
-                <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
-                BEGIN CAPTURE
-              </button>
-            ) : captureState === 'extracting' ? (
-              <button className="btn-capture btn-capture-extracting" disabled>
-                <span className="extracting-spinner" />
-                DECODING...
-              </button>
+            {captureMode === 'voice' ? (
+              <>
+                {perfConfig.vadBarCount > 0 && (
+                  <div className="vad-indicator" data-state={captureState}>
+                    <div className="vad-bars">
+                      {Array.from({ length: perfConfig.vadBarCount }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`vad-bar ${captureState === 'listening' && perfConfig.animationsEnabled ? 'vad-bar-active' : ''}`}
+                          style={perfConfig.animationsEnabled ? { animationDelay: `${i * 0.08}s` } : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {captureState === 'idle' ? (
+                  <button className="btn-capture" onClick={startCapture}>
+                    <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
+                    BEGIN CAPTURE
+                  </button>
+                ) : captureState === 'extracting' ? (
+                  <button className="btn-capture btn-capture-extracting" disabled>
+                    <span className="extracting-spinner" />
+                    DECODING...
+                  </button>
+                ) : (
+                  <button className="btn-capture btn-capture-decode" onClick={decodeIntelligence}>
+                    <span className="decode-icon" />
+                    DECODE INTELLIGENCE
+                  </button>
+                )}
+              </>
             ) : (
-              <button className="btn-capture btn-capture-decode" onClick={decodeIntelligence}>
-                <span className="decode-icon" />
-                DECODE INTELLIGENCE
-              </button>
+              <div className="text-input-panel">
+                <textarea
+                  className="text-input-area"
+                  placeholder="Type or paste your notes here..."
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleTextSubmit();
+                    }
+                  }}
+                  rows={4}
+                />
+                <div className="text-input-actions">
+                  <span className="text-input-hint">Ctrl+Enter to submit</span>
+                  <button
+                    className="btn-text-submit"
+                    onClick={handleTextSubmit}
+                    disabled={!textInput.trim() || isTextExtracting}
+                  >
+                    {isTextExtracting ? 'DECODING...' : 'SUBMIT & DECODE'}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -458,7 +548,7 @@ Extracted facts:`;
           </div>
 
           <div className="intel-list">
-            {session.intelligence.length === 0 && captureState === 'extracting' && (
+            {session.intelligence.length === 0 && (captureState === 'extracting' || isTextExtracting) && (
               <div className="empty-state-capture extracting-state">
                 <div className="extracting-indicator">
                   <span className="extracting-spinner" />
@@ -527,7 +617,7 @@ Extracted facts:`;
                     </div>
                   ))}
 
-                  {items.length === 0 && !isAdding && captureState !== 'extracting' && (
+                  {items.length === 0 && !isAdding && captureState !== 'extracting' && !isTextExtracting && (
                     <div className="intel-category-hint">
                       No findings yet
                     </div>

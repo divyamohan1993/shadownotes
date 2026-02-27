@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
@@ -8,12 +8,16 @@ import { VaultUnlock } from './components/VaultUnlock';
 import { CaseList } from './components/CaseList';
 import { CaseDetail } from './components/CaseDetail';
 import { VoiceCommandHelp } from './components/VoiceCommandHelp';
+import { GlobalSearch } from './components/GlobalSearch';
+import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp';
+import { ExportModal } from './components/ExportModal';
 import { PerfProvider, DebugPanel } from './perfConfig';
 import { VaultProvider, useVault } from './VaultContext';
 import { isPRFSupported } from './auth';
+import { DOMAINS } from './domains';
 import { type VoiceCommand } from './voiceCommands';
 import { generateCaseNumber } from './domains';
-import type { AppScreen, SessionData, SessionContent, DomainProfile, TranscriptEntry, IntelligenceItem, VaultCase, VaultSession } from './types';
+import type { AppScreen, SessionData, SessionContent, DomainProfile, TranscriptEntry, IntelligenceItem, VaultCase, VaultSession, SearchResult } from './types';
 
 interface ReviewState {
   sessionId: string;
@@ -56,13 +60,59 @@ function AppInner() {
   // Storage warning
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
 
-  // Voice help
+  // Voice help + keyboard help + search
   const [showVoiceHelp, setShowVoiceHelp] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Export modal
+  const [exportModal, setExportModal] = useState<{ mode: 'export' | 'import'; caseId?: string } | null>(null);
+
+  // Voice delete confirmation
+  const [pendingVoiceDelete, setPendingVoiceDelete] = useState<string | null>(null);
+
+  // Auto-lock timer
+  const [autoLockMs, setAutoLockMs] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('shadownotes-autolock');
+      return saved ? parseInt(saved, 10) : 300_000;
+    } catch { return 300_000; }
+  });
+  const lastActivityRef = useRef(Date.now());
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check PRF support on mount
   useEffect(() => {
     isPRFSupported().then(setPrfSupported);
   }, []);
+
+  // Auto-lock timer
+  useEffect(() => {
+    if (!vault.isUnlocked || autoLockMs === 0) return;
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = setTimeout(() => {
+        vault.lock();
+        setScreen('unlock');
+        setCurrentCase(null);
+        setCurrentDomain(null);
+        setReview(null);
+      }, autoLockMs);
+    };
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'] as const;
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
+    resetTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+    };
+  }, [vault.isUnlocked, autoLockMs, vault]);
+
+  // Persist auto-lock setting
+  useEffect(() => {
+    try { localStorage.setItem('shadownotes-autolock', String(autoLockMs)); } catch {}
+  }, [autoLockMs]);
 
   // Boot sequence — phases 1-3 are instant (cosmetic), real async starts at SDK init
   useEffect(() => {
@@ -279,6 +329,27 @@ function AppInner() {
     await vault.updateSession(currentCase.id, review.sessionId, updated);
   }, [review, currentCase, vault]);
 
+  // Pin/unpin a case
+  const handlePinCase = useCallback(async (id: string, pinned: boolean) => {
+    await vault.pinCase(id, pinned);
+  }, [vault]);
+
+  // Navigate to a search result
+  const handleSearchNavigate = useCallback(async (result: SearchResult) => {
+    const domain = DOMAINS.find(d => d.id === result.case.domainId);
+    if (!domain) return;
+    setCurrentDomain(domain);
+    setCurrentCase(result.case);
+    try {
+      const content = await vault.loadSession(result.case.id, result.session.id);
+      setReview({ sessionId: result.session.id, content, session: result.session });
+      setScreen('summary');
+    } catch {
+      setScreen('case-detail');
+    }
+    setShowSearch(false);
+  }, [vault]);
+
   // Back from summary to case detail
   const clearReview = useCallback(() => {
     setReview(null);
@@ -304,6 +375,10 @@ function AppInner() {
         }
         break;
       case 'delete-case':
+        if (screen === 'cases' && currentDomain && cmd.args) {
+          const found = await vault.findCase(currentDomain.id, cmd.args);
+          if (found) setPendingVoiceDelete(found.id);
+        }
         break;
       case 'new-session':
         if (screen === 'case-detail') handleNewSession();
@@ -330,11 +405,51 @@ function AppInner() {
         if (screen === 'capture') handleDiscardSession();
         break;
       case 'list-cases':
+        if (screen !== 'cases' && currentDomain) {
+          setScreen('cases');
+        }
+        break;
       case 'show-history':
+        if (screen !== 'case-detail' && currentCase) {
+          setScreen('case-detail');
+        }
+        break;
       case 'confirm-delete':
+        if (pendingVoiceDelete) {
+          await vault.deleteCase(pendingVoiceDelete);
+          setPendingVoiceDelete(null);
+          await refreshStorageWarning();
+        }
         break;
     }
   }, [screen, currentDomain, currentCase, vault, handleCreateCase, handleOpenCase, handleNewSession, handleOpenSession, handleSaveSession, handleDiscardSession, clearReview]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(true);
+      } else if (ctrl && e.key === 'n') {
+        e.preventDefault();
+        if (screen === 'case-detail') handleNewSession();
+      } else if (ctrl && e.key === 's') {
+        e.preventDefault();
+        if (screen === 'capture') handleSaveSession();
+      } else if (e.key === 'Escape') {
+        if (showSearch) { setShowSearch(false); return; }
+        if (showVoiceHelp) { setShowVoiceHelp(false); return; }
+        if (showKeyboardHelp) { setShowKeyboardHelp(false); return; }
+        if (exportModal) { setExportModal(null); return; }
+      } else if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        setShowKeyboardHelp(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [screen, showSearch, showVoiceHelp, showKeyboardHelp, exportModal, handleNewSession, handleSaveSession]);
 
   // Boot screen
   if (!sdkReady) {
@@ -398,7 +513,11 @@ function AppInner() {
       )}
 
       {screen === 'init' && (
-        <SessionInit onStart={handleSelectDomain} />
+        <SessionInit
+          onStart={handleSelectDomain}
+          onSearch={() => setShowSearch(true)}
+          onImport={() => setExportModal({ mode: 'import' })}
+        />
       )}
 
       {screen === 'cases' && currentDomain && (
@@ -408,7 +527,9 @@ function AppInner() {
           onCreateCase={handleCreateCase}
           onOpenCase={handleOpenCase}
           onDeleteCase={handleDeleteCase}
+          onPinCase={handlePinCase}
           onBack={() => setScreen('init')}
+          onShowVoiceHelp={() => setShowVoiceHelp(true)}
           storageWarning={storageWarning}
         />
       )}
@@ -422,7 +543,9 @@ function AppInner() {
           onOpenSession={handleOpenSession}
           onDeleteSession={handleDeleteSession}
           onDeleteCase={handleDeleteCurrentCase}
+          onExportCase={() => setExportModal({ mode: 'export', caseId: currentCase.id })}
           onBack={() => { setCurrentCase(null); setScreen('cases'); }}
+          onShowVoiceHelp={() => setShowVoiceHelp(true)}
         />
       )}
 
@@ -437,6 +560,7 @@ function AppInner() {
           onEndSession={handleSaveSession}
           onDiscardSession={handleDiscardSession}
           onVoiceCommand={handleVoiceCommand}
+          onShowVoiceHelp={() => setShowVoiceHelp(true)}
         />
       )}
 
@@ -459,7 +583,29 @@ function AppInner() {
         <VoiceCommandHelp screen={screen} onClose={() => setShowVoiceHelp(false)} />
       )}
 
-      <DebugPanel />
+      {showKeyboardHelp && (
+        <KeyboardShortcutsHelp onClose={() => setShowKeyboardHelp(false)} />
+      )}
+
+      {showSearch && (
+        <GlobalSearch
+          searchAll={vault.searchAll}
+          onNavigate={handleSearchNavigate}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {exportModal && (
+        <ExportModal
+          mode={exportModal.mode}
+          caseId={exportModal.caseId}
+          exportCase={vault.exportCase}
+          importDossier={vault.importDossier}
+          onClose={() => setExportModal(null)}
+        />
+      )}
+
+      <DebugPanel autoLockMs={autoLockMs} onAutoLockChange={setAutoLockMs} />
     </div>
   );
 }

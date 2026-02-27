@@ -9,10 +9,12 @@ interface Props {
   onOpenSession: (session: VaultSession) => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
   onDeleteCase: () => Promise<void>;
+  onExportCase: () => void;
   onBack: () => void;
+  onShowVoiceHelp: () => void;
 }
 
-export function CaseDetail({ domain, caseItem, listSessions, onNewSession, onOpenSession, onDeleteSession, onDeleteCase, onBack }: Props) {
+export function CaseDetail({ domain, caseItem, listSessions, onNewSession, onOpenSession, onDeleteSession, onDeleteCase, onExportCase, onBack, onShowVoiceHelp }: Props) {
   const [sessions, setSessions] = useState<VaultSession[]>([]);
   const [confirmDeleteSession, setConfirmDeleteSession] = useState<string | null>(null);
   const [confirmDeleteCase, setConfirmDeleteCase] = useState(false);
@@ -58,7 +60,10 @@ export function CaseDetail({ domain, caseItem, listSessions, onNewSession, onOpe
   return (
     <div className="case-detail-screen">
       <header className="case-detail-header">
-        <button className="btn-back" onClick={onBack}>{'\u2190'} CASES</button>
+        <div className="case-detail-header-top">
+          <button className="btn-back" onClick={onBack}>{'\u2190'} CASES</button>
+          <button className="btn-voice-help" onClick={onShowVoiceHelp} title="Voice commands">?</button>
+        </div>
         <div className="case-detail-title-row">
           <span className="case-shortid-large">{caseItem.shortId}</span>
           <h1 className="case-detail-title">{caseItem.name}</h1>
@@ -75,6 +80,9 @@ export function CaseDetail({ domain, caseItem, listSessions, onNewSession, onOpe
       <div className="case-detail-actions">
         <button className="btn-new-session" onClick={onNewSession}>
           <span className="rec-dot-static" /> NEW SESSION
+        </button>
+        <button className="btn-export-case" onClick={onExportCase}>
+          EXPORT CASE
         </button>
         <button
           className={`btn-delete-case-detail ${confirmDeleteCase ? 'btn-delete-confirm' : ''}`}

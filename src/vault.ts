@@ -162,10 +162,38 @@ export class VaultDB {
       const request = index.getAll(domainId);
       request.onsuccess = () => {
         const cases: VaultCase[] = request.result;
-        cases.sort((a, b) => b.updatedAt - a.updatedAt);
+        cases.sort((a, b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          return b.updatedAt - a.updatedAt;
+        });
         resolve(cases);
       };
       request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getAllCases(): Promise<VaultCase[]> {
+    const db = this.ensureDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('cases', 'readonly');
+      const store = tx.objectStore('cases');
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async pinCase(id: string, pinned: boolean): Promise<void> {
+    const db = this.ensureDb();
+    const c = await this.getCase(id);
+    if (!c) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('cases', 'readwrite');
+      const store = tx.objectStore('cases');
+      store.put({ ...c, pinned });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   }
 

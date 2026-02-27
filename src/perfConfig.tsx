@@ -107,7 +107,15 @@ export function usePerfConfig(): PerfContextValue {
 
 /* ─── Debug Panel Component ─── */
 
-export function DebugPanel() {
+const AUTO_LOCK_OPTIONS = [
+  { value: 0, label: 'Never' },
+  { value: 60_000, label: '1 min' },
+  { value: 300_000, label: '5 min' },
+  { value: 900_000, label: '15 min' },
+  { value: 1_800_000, label: '30 min' },
+];
+
+export function DebugPanel({ autoLockMs, onAutoLockChange }: { autoLockMs?: number; onAutoLockChange?: (ms: number) => void }) {
   const { config, setConfig, applyPreset, activePreset } = usePerfConfig();
   const [open, setOpen] = useState(false);
 
@@ -190,6 +198,25 @@ export function DebugPanel() {
               <span className="debug-value">{config.interimThrottleMs}ms</span>
             </label>
           </div>
+
+          {/* Security */}
+          {onAutoLockChange && (
+            <div className="debug-section">
+              <div className="debug-section-heading">SECURITY</div>
+              <label className="debug-row">
+                <span>Auto-Lock</span>
+                <select
+                  className="debug-select"
+                  value={autoLockMs ?? 300_000}
+                  onChange={(e) => onAutoLockChange(+e.target.value)}
+                >
+                  {AUTO_LOCK_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
 
           {/* Rendering */}
           <div className="debug-section">

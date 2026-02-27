@@ -37,6 +37,7 @@ export interface VaultCase {
   shortId: string;
   createdAt: number;
   updatedAt: number;
+  pinned?: boolean;
 }
 
 export interface VaultSession {
@@ -62,3 +63,29 @@ export interface SessionContent {
 }
 
 export type AppScreen = 'init' | 'unlock' | 'cases' | 'case-detail' | 'capture' | 'summary';
+
+export interface SearchResult {
+  type: 'transcript' | 'intelligence';
+  case: VaultCase;
+  session: VaultSession;
+  excerpt: string;
+  category?: string;
+  timestamp: string;
+}
+
+export interface ShadowExportSession {
+  meta: Omit<VaultSession, 'encrypted'>;
+  encrypted: string; // base64
+}
+
+export interface ShadowExportCase {
+  case: VaultCase;
+  sessions: ShadowExportSession[];
+}
+
+export interface ShadowExportBundle {
+  version: 1;
+  format: 'shadow-export-v1';
+  exportedAt: number;
+  cases: ShadowExportCase[];
+}

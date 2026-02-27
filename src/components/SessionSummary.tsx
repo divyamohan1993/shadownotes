@@ -11,10 +11,30 @@ interface Props {
   onBack: () => void;
 }
 
+function getRelativeTime(timestampStr: string, sessionCreatedAt: number): string {
+  const [h, m, s] = timestampStr.split(':').map(Number);
+  const startDate = new Date(sessionCreatedAt);
+  const startSecs = startDate.getHours() * 3600 + startDate.getMinutes() * 60 + startDate.getSeconds();
+  const entrySecs = h * 3600 + m * 60 + s;
+  const diffS = Math.max(0, entrySecs - startSecs);
+  const mm = Math.floor(diffS / 60).toString().padStart(2, '0');
+  const ss = (diffS % 60).toString().padStart(2, '0');
+  return `+${mm}:${ss}`;
+}
+
 export function SessionSummary({ domain, vaultSession, content, onUpdateIntelligence, onDeleteIntelligence, onDeleteSession, onBack }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = useCallback(async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch { /* clipboard API may not be available */ }
+  }, []);
 
   const startEdit = useCallback((item: IntelligenceItem) => {
     setEditingId(item.id);
@@ -61,6 +81,33 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
     acc[item.category].push(item);
     return acc;
   }, {}), [content.intelligence]);
+
+  // Format full dossier text for copy
+  const dossierText = useMemo(() => {
+    const lines: string[] = [
+      '=== SESSION DOSSIER ===',
+      `CASE: ${vaultSession.caseNumber}`,
+      `OPERATION: ${domain.codename}`,
+      `DOMAIN: ${domain.name}`,
+      `CLEARANCE: ${domain.clearanceLevel}`,
+      `INITIATED: ${new Date(vaultSession.createdAt).toISOString()}`,
+      `DURATION: ${formatDuration(vaultSession.duration)}`,
+      '',
+      'TRANSCRIPT:',
+      ...content.transcripts.map(t => `[${t.timestamp}] ${t.text}`),
+      '',
+      'INTELLIGENCE:',
+    ];
+    for (const cat of domain.categories) {
+      const items = groupedIntel[cat];
+      if (!items || items.length === 0) continue;
+      lines.push(`\n--- ${cat.toUpperCase()} ---`);
+      for (const item of items) {
+        lines.push(`[${item.category}] ${item.content}`);
+      }
+    }
+    return lines.join('\n');
+  }, [vaultSession, domain, content, groupedIntel]);
 
   return (
     <div className="summary-screen">
@@ -110,10 +157,20 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
       <div className="dossier-body">
         {/* Transcript section */}
         <div className="dossier-section">
-          <h2 className="section-heading">
-            <span className="section-marker">{'\u{25B8}'}</span>
-            RAW TRANSCRIPT
-          </h2>
+          <div className="dossier-section-header">
+            <h2 className="section-heading">
+              <span className="section-marker">{'\u{25B8}'}</span>
+              RAW TRANSCRIPT
+            </h2>
+            {content.transcripts.length > 0 && (
+              <button
+                className={`btn-copy ${copiedId === 'transcript' ? 'copied' : ''}`}
+                onClick={() => handleCopy(content.transcripts.map(t => `[${t.timestamp}] ${t.text}`).join('\n'), 'transcript')}
+              >
+                {copiedId === 'transcript' ? 'COPIED' : 'COPY'}
+              </button>
+            )}
+          </div>
           <div className="dossier-transcript">
             {content.transcripts.length === 0 ? (
               <p className="dossier-empty">No transcript data captured.</p>
@@ -121,6 +178,7 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
               content.transcripts.map((t, i) => (
                 <div key={i} className="dossier-transcript-line">
                   <span className="transcript-time">[{t.timestamp}]</span>
+                  <span className="transcript-time-rel">{getRelativeTime(t.timestamp, vaultSession.createdAt)}</span>
                   <span>{t.text}</span>
                 </div>
               ))
@@ -162,6 +220,13 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
                         </span>
                       )}
                       <span className="intel-time-small">[{item.timestamp}]</span>
+                      <button
+                        className={`btn-copy ${copiedId === item.id ? 'copied' : ''}`}
+                        onClick={() => handleCopy(item.content, item.id)}
+                        title="Copy finding"
+                      >
+                        {copiedId === item.id ? 'COPIED' : 'COPY'}
+                      </button>
                       <button className="intel-delete-btn" onClick={() => onDeleteIntelligence(item.id)} title="Remove finding">{'\u2715'}</button>
                     </div>
                   ))}
@@ -172,7 +237,7 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
         </div>
       </div>
 
-      {/* Footer with delete + back */}
+      {/* Footer with delete + back + copy */}
       <div className="dossier-footer">
         <div className="dossier-warning">
           {'\u{26A0}'} Session data is encrypted and stored locally. Deleting is permanent.
@@ -180,6 +245,12 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
         <div className="dossier-footer-actions">
           <button className="btn-back-case" onClick={onBack}>
             BACK TO CASE
+          </button>
+          <button
+            className={`btn-copy-dossier ${copiedId === 'dossier' ? 'copied' : ''}`}
+            onClick={() => handleCopy(dossierText, 'dossier')}
+          >
+            {copiedId === 'dossier' ? 'COPIED' : 'COPY DOSSIER'}
           </button>
           <button
             className={`btn-destroy ${confirmDelete ? 'btn-destroy-confirm' : ''}`}

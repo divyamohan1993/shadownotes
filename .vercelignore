@@ -1,0 +1,6 @@
+build/
+electron/
+release/
+dist-electron/
+electron-builder.yml
+tsconfig.electron.json

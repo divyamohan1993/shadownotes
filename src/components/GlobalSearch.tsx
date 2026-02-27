@@ -1,5 +1,22 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { SearchResult } from '../types';
+import type { SearchResult, IntelligenceItem } from '../types';
+
+// ---------------------------------------------------------------------------
+// Graceful dynamic import for embeddings (same pattern as ActiveCapture.tsx)
+// ---------------------------------------------------------------------------
+let useEmbeddings: () => {
+  isAvailable: boolean;
+  findSimilar: (query: string, items: IntelligenceItem[], topK?: number) => Promise<IntelligenceItem[]>;
+};
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ useEmbeddings } = require('../hooks/useEmbeddings'));
+} catch {
+  useEmbeddings = () => ({
+    isAvailable: false,
+    findSimilar: async (_q: string, items: IntelligenceItem[]) => items,
+  });
+}
 
 interface Props {
   searchAll: (query: string) => Promise<SearchResult[]>;
@@ -12,11 +29,14 @@ export function GlobalSearch({ searchAll, onNavigate, onClose }: Props) {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [semanticRanked, setSemanticRanked] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+
+  const embeddings = useEmbeddings();
 
   // Store the element that had focus before the modal opened
   useEffect(() => {
@@ -65,17 +85,44 @@ export function GlobalSearch({ searchAll, onNavigate, onClose }: Props) {
     if (!q.trim()) {
       setResults([]);
       setHasSearched(false);
+      setSemanticRanked(false);
       return;
     }
     setIsSearching(true);
+    setSemanticRanked(false);
     try {
       const r = await searchAll(q.trim());
       setResults(r);
       setHasSearched(true);
+
+      // Semantic reranking: if embeddings are available, reorder results by
+      // semantic similarity to the query. The text-based search remains the
+      // primary filter; embeddings only reorder for better relevance.
+      if (embeddings.isAvailable && r.length > 1) {
+        try {
+          // Create temporary IntelligenceItem proxies keyed by index so
+          // findSimilar can compute similarity on the excerpt text.
+          const proxyItems: IntelligenceItem[] = r.map((res, idx) => ({
+            id: String(idx),
+            category: res.category || res.type,
+            content: res.excerpt,
+            timestamp: res.timestamp,
+          }));
+
+          const ranked = await embeddings.findSimilar(q.trim(), proxyItems, r.length);
+
+          // Map proxy items back to original SearchResult objects
+          const reordered = ranked.map((proxy) => r[Number(proxy.id)]);
+          setResults(reordered);
+          setSemanticRanked(true);
+        } catch {
+          // Semantic ranking failed silently -- keep text-based order
+        }
+      }
     } finally {
       setIsSearching(false);
     }
-  }, [searchAll]);
+  }, [searchAll, embeddings]);
 
   const handleInput = useCallback((value: string) => {
     setQuery(value);
@@ -138,7 +185,12 @@ export function GlobalSearch({ searchAll, onNavigate, onClose }: Props) {
           )}
 
           {!isSearching && hasSearched && results.length > 0 && (
-            <div className="search-status" role="status">{results.length} RESULT{results.length !== 1 ? 'S' : ''} FOUND</div>
+            <div className="search-status" role="status">
+              {results.length} RESULT{results.length !== 1 ? 'S' : ''} FOUND
+              {semanticRanked && (
+                <span className="sdk-badge active" title="Semantic ranking active" style={{ marginLeft: '0.5rem', verticalAlign: 'middle' }}>SEM</span>
+              )}
+            </div>
           )}
         </div>
 

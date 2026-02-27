@@ -48,6 +48,21 @@ export interface EmbeddingsResult {
     items: IntelligenceItem[],
     topK?: number,
   ) => Promise<IntelligenceItem[]>;
+  /**
+   * Build RAG context by semantically retrieving the most relevant prior findings
+   * for a given transcript chunk. Uses embeddings to find the top-K most relevant
+   * prior items, ranked by cosine similarity.
+   *
+   * @param query      - Current transcript text to find relevant context for
+   * @param priorItems - Pool of prior intelligence items to search
+   * @param topK       - Number of results to return (default 5)
+   * @returns Formatted string of the top-K most relevant prior findings
+   */
+  buildRAGContext: (
+    query: string,
+    priorItems: IntelligenceItem[],
+    topK?: number,
+  ) => Promise<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -217,6 +232,25 @@ export function useEmbeddings(): EmbeddingsResult {
     [getVector, getVectors],
   );
 
+  const buildRAGContext = useCallback(
+    async (
+      query: string,
+      priorItems: IntelligenceItem[],
+      topK: number = DEFAULT_TOP_K,
+    ): Promise<string> => {
+      if (priorItems.length === 0) return '';
+
+      // Use findSimilar to rank prior items by semantic relevance to the query
+      const relevant = await findSimilar(query, priorItems, topK);
+
+      if (relevant.length === 0) return '';
+
+      const lines = relevant.map((item) => `[${item.category}] ${item.content}`);
+      return `Semantically relevant prior findings (RAG retrieval):\n${lines.join('\n')}`;
+    },
+    [findSimilar],
+  );
+
   const isAvailable = useMemo(() => {
     try {
       return Embeddings.isModelLoaded;
@@ -225,5 +259,5 @@ export function useEmbeddings(): EmbeddingsResult {
     }
   }, []);
 
-  return { isAvailable, deduplicate, findSimilar };
+  return { isAvailable, deduplicate, findSimilar, buildRAGContext };
 }

@@ -14,6 +14,34 @@ vi.mock('../../hooks/useModelLoader', () => ({
 
 vi.mock('@runanywhere/web', () => ({
   ModelCategory: { Language: 'language' },
+  LLMFramework: { LlamaCpp: 'llamacpp' },
+  AccelerationPreference: { Auto: 'auto', CPU: 'cpu' },
+  SDKEnvironment: { Production: 'production' },
+  RunAnywhere: { initialize: vi.fn(async () => {}), registerModels: vi.fn() },
+  ModelManager: { getModels: vi.fn(() => []), getLoadedModel: vi.fn(() => null), downloadModel: vi.fn(async () => {}), loadModel: vi.fn(async () => true) },
+  OPFSStorage: vi.fn().mockImplementation(() => ({ initialize: vi.fn(async () => false), hasModel: vi.fn(async () => false) })),
+  EventBus: { shared: { on: vi.fn(() => () => {}) } },
+  SDKLogger: class { info = vi.fn(); warning = vi.fn(); error = vi.fn(); },
+  detectCapabilities: vi.fn(async () => ({ hasWebGPU: false, hasWASMSIMD: true, deviceMemoryGB: 8, hardwareConcurrency: 8 })),
+  VoicePipeline: vi.fn().mockImplementation(() => ({ processTurn: vi.fn(async () => ({ transcript: '' })) })),
+  VoiceAgent: { create: vi.fn(async () => ({ loadModels: vi.fn(async () => {}), processVoiceTurn: vi.fn(async () => ({})), destroy: vi.fn() })) },
+  VoiceAgentSession: vi.fn(),
+}));
+
+vi.mock('../../runanywhere', () => ({
+  initSDK: vi.fn(async () => {}),
+  getRecommendedPreset: vi.fn(() => 'high'),
+  getCapabilities: vi.fn(async () => ({ hasWebGPU: false, hasWASMSIMD: true, deviceMemoryGB: 8, hardwareConcurrency: 8 })),
+  createVoiceAgent: vi.fn(async () => ({
+    session: { loadModels: vi.fn(), processVoiceTurn: vi.fn(), destroy: vi.fn() },
+    pipeline: { processTurn: vi.fn(async () => ({ transcript: '' })) },
+    destroy: vi.fn(),
+  })),
+  ModelManager: { getModels: vi.fn(() => []), getLoadedModel: vi.fn(() => null), downloadModel: vi.fn(async () => {}), loadModel: vi.fn(async () => true) },
+  ModelCategory: { Language: 'language' },
+  OPFSStorage: vi.fn().mockImplementation(() => ({ initialize: vi.fn(async () => false), hasModel: vi.fn(async () => false) })),
+  EventBus: { shared: { on: vi.fn(() => () => {}) } },
+  AudioCapture: vi.fn().mockImplementation(() => ({ start: vi.fn(), stop: vi.fn(), drainBuffer: vi.fn(() => new Float32Array(0)), isCapturing: false })),
 }));
 
 vi.mock('@runanywhere/web-llamacpp', () => ({
@@ -25,6 +53,17 @@ vi.mock('@runanywhere/web-llamacpp', () => ({
       latencyMs: 0,
     })),
   },
+}));
+
+vi.mock('@runanywhere/web-onnx', () => ({
+  ONNX: { register: vi.fn(async () => {}) },
+  STT: { isModelLoaded: false, transcribe: vi.fn() },
+  TTS: { isVoiceLoaded: false, synthesize: vi.fn() },
+  VAD: { isInitialized: false, onSpeechActivity: vi.fn(() => () => {}), processSamples: vi.fn(), flush: vi.fn(), popSpeechSegment: vi.fn() },
+  AudioCapture: vi.fn().mockImplementation(() => ({ start: vi.fn(), stop: vi.fn(), drainBuffer: vi.fn(() => new Float32Array(0)), isCapturing: false })),
+  AudioPlayback: vi.fn().mockImplementation(() => ({ play: vi.fn(), stop: vi.fn(), dispose: vi.fn(), isPlaying: false })),
+  SpeechActivity: { Started: 'started', Ended: 'ended' },
+  STTModelType: {},
 }));
 
 // Mock SpeechRecognition API

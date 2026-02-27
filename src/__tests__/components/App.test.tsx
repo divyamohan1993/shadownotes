@@ -9,6 +9,7 @@ function createInitPromise() {
 
 vi.mock('../../runanywhere', () => ({
   initSDK: vi.fn(() => createInitPromise()),
+  getRecommendedPreset: vi.fn(() => 'medium'),
   ModelManager: {
     getModels: vi.fn(() => []),
   },

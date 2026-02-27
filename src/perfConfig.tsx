@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
+import { getRecommendedPreset } from './runanywhere';
 
 export interface PerfConfig {
   // LLM
@@ -85,8 +86,10 @@ const PerfContext = createContext<PerfContextValue | null>(null);
 
 export function PerfProvider({ children }: { children: ReactNode }) {
   const [config, setConfigRaw] = useState<PerfConfig>(loadConfig);
+  const userOverrodeRef = useRef(false);
 
   const setConfig = useCallback((c: PerfConfig) => {
+    userOverrodeRef.current = true;
     setConfigRaw(c);
     saveConfig(c);
   }, []);
@@ -103,6 +106,30 @@ export function PerfProvider({ children }: { children: ReactNode }) {
       }
     }
     return null;
+  }, [config]);
+
+  // Auto-detect recommended preset on mount based on device capabilities.
+  // Only runs once and does not override a user's manual selection or saved config.
+  useEffect(() => {
+    const MANUAL_KEY = 'shadownotes-perf-manual';
+    const alreadyManual = (() => { try { return localStorage.getItem(MANUAL_KEY) === '1'; } catch { return false; } })();
+    const hasSavedConfig = (() => { try { return !!localStorage.getItem(STORAGE_KEY); } catch { return false; } })();
+    if (alreadyManual || userOverrodeRef.current || hasSavedConfig) return;
+
+    const preset = getRecommendedPreset();
+    const presetName = preset === 'high' ? 'High' : preset === 'low' ? 'Low' : 'Medium';
+    const presetConfig = PERF_PRESETS[presetName];
+    if (presetConfig) {
+      setConfigRaw(presetConfig);
+      saveConfig(presetConfig);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark that the user has manually chosen a config after the initial auto-detect
+  useEffect(() => {
+    if (userOverrodeRef.current) {
+      try { localStorage.setItem('shadownotes-perf-manual', '1'); } catch { /* ignore */ }
+    }
   }, [config]);
 
   const value = useMemo(() => ({ config, setConfig, applyPreset, activePreset }), [config, setConfig, applyPreset, activePreset]);

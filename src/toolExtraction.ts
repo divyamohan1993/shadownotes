@@ -16,11 +16,15 @@ import {
   type ToolCall,
   type ToolValue,
   toToolValue,
+  fromToolValue,
   getStringArg,
   getNumberArg,
-} from '@runanywhere/web-llamacpp';
+  SDKLogger,
+} from './runanywhere';
 import type { IntelligenceItem, DomainProfile } from './types';
 import { getTimestamp } from './extraction';
+
+const log = new SDKLogger('ToolExtraction');
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -108,9 +112,12 @@ function toolCallToItem(call: ToolCall, timestamp: string): IntelligenceItem | n
   if (call.toolName === 'extract_finding') {
     const category = getStringArg(args, 'category');
     const content = getStringArg(args, 'content');
-    // confidence is informational -- we don't filter on it today but it's
-    // preserved in the structured call for downstream consumers.
+    // Deserialize confidence via fromToolValue for proper ToolValue handling
+    const rawConfidence = args.confidence != null ? fromToolValue(args.confidence as ToolValue) : null;
+    const confidence = typeof rawConfidence === 'number' ? rawConfidence : getNumberArg(args, 'confidence') ?? 1;
     if (!category || !content) return null;
+    // Skip very low-confidence extractions (likely hallucinations)
+    if (confidence < 0.15) return null;
     return {
       id: crypto.randomUUID(),
       category,
@@ -204,7 +211,7 @@ export async function extractWithTools(
     return items;
   } catch (err) {
     // Graceful fallback -- the keyword extractor remains the safety net
-    console.warn('[toolExtraction] extraction failed, returning empty:', err);
+    log.warning(`Tool extraction failed, returning empty: ${err}`);
     return [];
   } finally {
     // Clean up: unregister only the tools we registered

@@ -1,10 +1,36 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 
 interface Props {
   onUnlockPRF: () => void;
   onUnlockPassphrase: (passphrase: string) => void;
   prfSupported: boolean;
   error: string | null;
+}
+
+// Exponential backoff durations in seconds, indexed by (failedAttempts - 3).
+// After 3 failures: 5s, then 15s, 30s, 60s (capped).
+const LOCKOUT_SCHEDULE = [5, 15, 30, 60] as const;
+const MAX_FREE_ATTEMPTS = 3;
+
+function getLockoutDuration(failedAttempts: number): number {
+  if (failedAttempts < MAX_FREE_ATTEMPTS) return 0;
+  const idx = Math.min(failedAttempts - MAX_FREE_ATTEMPTS, LOCKOUT_SCHEDULE.length - 1);
+  return LOCKOUT_SCHEDULE[idx];
+}
+
+function loadFailedAttempts(): number {
+  try {
+    const stored = sessionStorage.getItem('vault_failed_attempts');
+    return stored ? Math.max(0, parseInt(stored, 10) || 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveFailedAttempts(count: number): void {
+  try {
+    sessionStorage.setItem('vault_failed_attempts', String(count));
+  } catch { /* sessionStorage unavailable — degrade silently */ }
 }
 
 function calcPassphraseStrength(passphrase: string): { label: string; level: 'weak' | 'fair' | 'strong' | 'excellent'; percent: number } {
@@ -32,6 +58,61 @@ export function VaultUnlock({ onUnlockPRF, onUnlockPassphrase, prfSupported, err
   const passphraseInputRef = useRef<HTMLInputElement>(null);
   const prfButtonRef = useRef<HTMLButtonElement>(null);
 
+  // --- Rate-limiting state ---
+  const [failedAttempts, setFailedAttempts] = useState(loadFailedAttempts);
+  const [lockoutEnd, setLockoutEnd] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const prevErrorRef = useRef<string | null>(error);
+
+  const isLockedOut = countdown > 0;
+
+  // When the parent reports a new error, count it as a failed attempt.
+  useEffect(() => {
+    if (error && error !== prevErrorRef.current) {
+      setFailedAttempts((prev) => {
+        const next = prev + 1;
+        saveFailedAttempts(next);
+        const lockoutSecs = getLockoutDuration(next);
+        if (lockoutSecs > 0) {
+          setLockoutEnd(Date.now() + lockoutSecs * 1000);
+        }
+        return next;
+      });
+    }
+    prevErrorRef.current = error;
+  }, [error]);
+
+  // Countdown timer — ticks every second while locked out.
+  useEffect(() => {
+    if (lockoutEnd === null) return;
+    const tick = () => {
+      const remaining = Math.ceil((lockoutEnd - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setCountdown(0);
+        setLockoutEnd(null);
+      } else {
+        setCountdown(remaining);
+      }
+    };
+    tick(); // immediate first tick
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [lockoutEnd]);
+
+  // Guarded unlock handlers — block interaction during lockout.
+  const handleUnlockPRF = useCallback(() => {
+    if (isLockedOut) return;
+    onUnlockPRF();
+  }, [isLockedOut, onUnlockPRF]);
+
+  const handleUnlockPassphrase = useCallback((pp: string) => {
+    if (isLockedOut) return;
+    onUnlockPassphrase(pp);
+    // On success the parent unmounts this component, which resets state.
+    // We also clear sessionStorage preemptively so a remount starts clean.
+    // (If unlock fails, the error effect above will increment the counter.)
+  }, [isLockedOut, onUnlockPassphrase]);
+
   const strength = useMemo(() => calcPassphraseStrength(passphrase), [passphrase]);
 
   // Focus the first interactive element on mount
@@ -57,7 +138,8 @@ export function VaultUnlock({ onUnlockPRF, onUnlockPassphrase, prfSupported, err
             <button
               ref={prfButtonRef}
               className="btn-unlock-prf"
-              onClick={onUnlockPRF}
+              onClick={handleUnlockPRF}
+              disabled={isLockedOut}
               aria-label="Authenticate using Windows Hello"
             >
               AUTHENTICATE via Windows Hello
@@ -73,7 +155,8 @@ export function VaultUnlock({ onUnlockPRF, onUnlockPassphrase, prfSupported, err
                   placeholder="Enter passphrase..."
                   value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && passphrase.trim()) onUnlockPassphrase(passphrase.trim()); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && passphrase.trim() && !isLockedOut) handleUnlockPassphrase(passphrase.trim()); }}
+                  disabled={isLockedOut}
                   aria-label="Vault passphrase"
                   aria-describedby="passphrase-instructions passphrase-strength"
                   autoComplete="current-password"
@@ -140,11 +223,11 @@ export function VaultUnlock({ onUnlockPRF, onUnlockPassphrase, prfSupported, err
 
               <button
                 className="btn-unlock-passphrase"
-                onClick={() => passphrase.trim() && onUnlockPassphrase(passphrase.trim())}
-                disabled={!passphrase.trim()}
+                onClick={() => passphrase.trim() && handleUnlockPassphrase(passphrase.trim())}
+                disabled={!passphrase.trim() || isLockedOut}
                 aria-label="Unlock vault with passphrase"
               >
-                UNLOCK VAULT
+                {isLockedOut ? `LOCKED (${countdown}s)` : 'UNLOCK VAULT'}
               </button>
             </div>
           )}
@@ -153,6 +236,17 @@ export function VaultUnlock({ onUnlockPRF, onUnlockPassphrase, prfSupported, err
         {error && (
           <div className="unlock-error" role="alert">
             <span>[AUTH ERROR]</span> {error}
+          </div>
+        )}
+
+        {isLockedOut && (
+          <div
+            className="unlock-error"
+            role="alert"
+            aria-live="assertive"
+            style={{ marginTop: '0.75rem' }}
+          >
+            <span>[LOCKOUT]</span> Too many failed attempts. Try again in {countdown}s
           </div>
         )}
 

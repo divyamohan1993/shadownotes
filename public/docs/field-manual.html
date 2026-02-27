@@ -307,8 +307,11 @@
         <div class="step-item">
           <div class="step-number">04</div>
           <div class="step-body">
-            <div class="step-title">Start Speaking</div>
-            <div class="step-desc">Click <strong>BEGIN CAPTURE</strong> and speak naturally. Your browser will ask for microphone permission. Speech is transcribed in real-time using the browser's built-in speech recognition. The streaming LLM extracts intelligence token-by-token as you speak.</div>
+            <div class="step-title">Choose Capture Mode</div>
+            <div class="step-desc">Three capture modes are available:
+              <strong>MIC</strong> &mdash; Push-to-talk voice capture with real-time transcription.
+              <strong>TEXT</strong> &mdash; Manual text input for quiet environments.
+              <strong>AGENT</strong> &mdash; Hands-free VoiceAgent mode using <code>VoicePipeline</code> + <code>VoiceAgent</code> for continuous listen-process-respond without manual button presses.</div>
             <div class="step-hint">Try: "Patient presents with elevated blood pressure, 160 over 95. Prescribing Telmisartan 40mg daily." Then click <strong>DECODE INTELLIGENCE</strong> to extract findings.</div>
           </div>
         </div>
@@ -465,9 +468,34 @@
           <div class="feature-desc">Animated data destruction with phase-by-phase memory wipe. Encrypted vault entry removed. Zero trace remains.</div>
         </div>
         <div class="feature-card">
+          <div class="feature-icon">&#x1F50A;</div>
+          <div class="feature-title">VoiceAgent Mode</div>
+          <div class="feature-desc">Hands-free operation via <code>VoicePipeline</code> + <code>VoiceAgent</code>. Continuous listen &rarr; process &rarr; respond loop. No button presses needed &mdash; speak and the AI extracts intelligence automatically.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F9E9;</div>
+          <div class="feature-title">RAG Context Injection</div>
+          <div class="feature-desc">Prior findings are semantically retrieved via embeddings and injected into the LLM prompt. Extraction accuracy improves across sessions as context builds.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F6E1;</div>
+          <div class="feature-title">Brute-Force Protection</div>
+          <div class="feature-desc">Vault unlock is rate-limited with exponential backoff (5s / 15s / 30s / 60s) after 3 failed attempts. Prevents passphrase guessing attacks.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F50D;</div>
+          <div class="feature-title">Semantic Search</div>
+          <div class="feature-desc">Global search results are reranked by semantic relevance using embeddings-based <code>findSimilar()</code>. Find intelligence by meaning, not just keywords.</div>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon">&#x2699;</div>
           <div class="feature-title">Deep SDK Integration</div>
           <div class="feature-desc">RunAnywhere SDK: All 3 packages (web, web-llamacpp, web-onnx) &mdash; 20+ genuinely load-bearing features including LLM streaming, ToolCalling, Embeddings, STT, TTS, VAD, AudioCapture, and AudioPlayback.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x267F;</div>
+          <div class="feature-title">WCAG 2.2 Accessible</div>
+          <div class="feature-desc">172+ ARIA attributes, full keyboard navigation, screen-reader support, reduced-motion and forced-colors media queries.</div>
         </div>
       </div>
     </section>
@@ -488,7 +516,8 @@
           <tr><td>Framework</td><td>React 19 + TypeScript (strict)</td><td>UI rendering and state management</td></tr>
           <tr><td>Build Tool</td><td>Vite 7 + ESLint</td><td>Development server, bundling, code quality</td></tr>
           <tr><td>AI SDK (core)</td><td>@runanywhere/web</td><td>ModelManager, EventBus, OPFSStorage</td></tr>
-          <tr><td>AI SDK (LLM)</td><td>@runanywhere/web-llamacpp</td><td>Streaming LLM, StructuredOutput, advanced sampling</td></tr>
+          <tr><td>AI SDK (LLM)</td><td>@runanywhere/web-llamacpp</td><td>Streaming LLM, StructuredOutput, ToolCalling, Embeddings</td></tr>
+          <tr><td>AI SDK (Audio)</td><td>@runanywhere/web-onnx</td><td>STT, TTS, VAD, AudioCapture, AudioPlayback</td></tr>
           <tr><td>LLM Model</td><td>Qwen2.5 0.5B Instruct Q4_K_M</td><td>Streaming extraction via llama.cpp WASM</td></tr>
           <tr><td>STT</td><td>Web Speech API</td><td>Browser-native speech-to-text transcription</td></tr>
           <tr><td>Encryption</td><td>AES-256-GCM + HKDF + PBKDF2</td><td>Per-case encryption for vault storage</td></tr>

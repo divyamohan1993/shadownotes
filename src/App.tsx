@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
 import { initSDK, ModelManager, ModelCategory, OPFSStorage } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
@@ -26,13 +26,69 @@ interface ReviewState {
   session: VaultSession;
 }
 
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ShadowNotes] Unhandled error:', error, info.componentStack);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="boot-screen" role="alert">
+          <div className="boot-container">
+            <div className="boot-logo">
+              <div className="boot-lock">{'\u26A0'}</div>
+              <h1 className="boot-title">SYSTEM ERROR</h1>
+              <div className="boot-subtitle">RECOVERY REQUIRED</div>
+            </div>
+            <div className="boot-log">
+              <div className="boot-line error">
+                <span className="boot-prefix">[ERR]</span> {this.state.error?.message || 'Unknown error'}
+              </div>
+              <div className="boot-line">
+                <span className="boot-prefix">[SYS]</span> The AI engine encountered an unexpected error.
+              </div>
+            </div>
+            <button
+              className="btn-begin"
+              onClick={this.handleReset}
+              style={{ marginTop: '1.5rem' }}
+            >
+              ATTEMPT RECOVERY
+            </button>
+            <div className="boot-classification">CLASSIFIED // EYES ONLY</div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function App() {
   return (
-    <PerfProvider>
-      <VaultProvider>
-        <AppInner />
-      </VaultProvider>
-    </PerfProvider>
+    <AppErrorBoundary>
+      <PerfProvider>
+        <VaultProvider>
+          <AppInner />
+        </VaultProvider>
+      </PerfProvider>
+    </AppErrorBoundary>
   );
 }
 
@@ -545,17 +601,26 @@ function AppInner() {
                 <span className="boot-check">{'\u2713'}</span>
               </div>
             )}
+            {bootPhase < 1 && (
+              <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '75%' }} aria-hidden="true" />
+            )}
             {bootPhase >= 2 && (
               <div className="boot-line done">
                 <span className="boot-prefix">[SEC]</span> Verifying air-gap integrity...
                 <span className="boot-check">{'\u2713'}</span>
               </div>
             )}
+            {bootPhase >= 1 && bootPhase < 2 && (
+              <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '70%' }} aria-hidden="true" />
+            )}
             {bootPhase >= 3 && (
               <div className={`boot-line ${bootPhase >= 4 ? 'done' : 'active'}`}>
                 <span className="boot-prefix">[AI]</span> Loading on-device inference engine...
                 {bootPhase >= 4 ? <span className="boot-check">{'\u2713'}</span> : <span className="boot-spinner" />}
               </div>
+            )}
+            {bootPhase >= 2 && bootPhase < 3 && (
+              <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '80%' }} aria-hidden="true" />
             )}
             {bootPhase >= 5 && (
               <div className={`boot-line ${modelProgress >= 1 ? 'done' : 'active'}`}>
@@ -564,6 +629,15 @@ function AppInner() {
                   ? <>Downloading AI model... <span className="boot-check">{'\u2713'}</span></>
                   : <>Downloading AI model... {Math.round(modelProgress * 100)}%</>
                 }
+              </div>
+            )}
+            {bootPhase >= 4 && bootPhase < 5 && (
+              <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '65%' }} aria-hidden="true" />
+            )}
+            {bootPhase >= 4 && (
+              <div className="boot-line done" style={{ opacity: 0.6 }}>
+                <span className="boot-prefix">[HW]</span> Device detected
+                <span className="boot-check">{'\u2713'}</span>
               </div>
             )}
             {sdkError && (

@@ -123,7 +123,20 @@ export async function decryptContent(key: CryptoKey, data: ArrayBuffer): Promise
   const iv = bytes.slice(0, 12);
   const ciphertext = bytes.slice(12);
   const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-  return JSON.parse(new TextDecoder().decode(plaintext)) as SessionContent;
+  const parsed = JSON.parse(new TextDecoder().decode(plaintext));
+
+  // Schema validation: ensure decrypted content matches expected structure
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('DECRYPT_INVALID_SCHEMA: decrypted content is not an object');
+  }
+  if (!Array.isArray(parsed.transcripts)) {
+    throw new Error('DECRYPT_INVALID_SCHEMA: missing transcripts array');
+  }
+  if (!Array.isArray(parsed.intelligence)) {
+    throw new Error('DECRYPT_INVALID_SCHEMA: missing intelligence array');
+  }
+
+  return parsed as SessionContent;
 }
 
 /**

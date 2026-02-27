@@ -21,6 +21,7 @@ import {
   EventBus,
   VoicePipeline,
   VoiceAgent,
+  VoiceAgentSession,
   SDKLogger,
   detectCapabilities,
   type CompactModelDef,
@@ -66,6 +67,9 @@ const MODELS: CompactModelDef[] = [
   },
 ];
 
+// ── SDK Logger Instance ─────────────────────────────────────
+const log = new SDKLogger('ShadowNotes');
+
 // ── Device Capabilities Cache ───────────────────────────────
 let _capabilities: WebCapabilities | null = null;
 
@@ -79,6 +83,24 @@ export async function getCapabilities(): Promise<WebCapabilities> {
   return _capabilities;
 }
 
+/**
+ * Get recommended performance settings based on device capabilities.
+ * Uses detectCapabilities() to adapt AI features for the hardware.
+ */
+export function getRecommendedPreset(): 'high' | 'medium' | 'low' {
+  if (!_capabilities) return 'medium';
+
+  const { deviceMemoryGB, hardwareConcurrency, hasWebGPU } = _capabilities;
+
+  // High: WebGPU + 8GB+ RAM + 8+ cores
+  if (hasWebGPU && deviceMemoryGB >= 8 && hardwareConcurrency >= 8) return 'high';
+
+  // Low: <4GB RAM or <4 cores (mobile/low-end)
+  if (deviceMemoryGB < 4 || hardwareConcurrency < 4) return 'low';
+
+  return 'medium';
+}
+
 // ── GPU Acceleration Detection ──────────────────────────────
 
 /** Check if the GPU supports ShaderF16 (required by the WebGPU WASM backend).
@@ -89,7 +111,7 @@ async function detectAcceleration(): Promise<AccelerationPreference> {
     // If GPU previously crashed this session, skip entirely
     const gpuCrashFlag = 'shadownotes_gpu_crash';
     if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(gpuCrashFlag)) {
-      console.warn('[ShadowNotes] GPU previously crashed -- forcing CPU inference this session');
+      log.warning('GPU previously crashed -- forcing CPU inference this session');
       return AccelerationPreference.CPU;
     }
 
@@ -106,7 +128,7 @@ async function detectAcceleration(): Promise<AccelerationPreference> {
     const adapter = await Promise.race([adapterPromise, timeoutPromise]);
 
     if (!adapter || !adapter.features.has('shader-f16')) {
-      console.warn('[ShadowNotes] GPU lacks shader-f16 -- falling back to CPU inference');
+      log.warning('GPU lacks shader-f16 -- falling back to CPU inference');
       return AccelerationPreference.CPU;
     }
 
@@ -119,7 +141,7 @@ async function detectAcceleration(): Promise<AccelerationPreference> {
     // (LlamaCPP.register will be the real test -- clear after SDK init)
     return AccelerationPreference.Auto;
   } catch (err) {
-    console.warn('[ShadowNotes] GPU detection error:', err);
+    log.warning(`GPU detection error: ${err}`);
     return AccelerationPreference.CPU;
   }
 }
@@ -148,7 +170,7 @@ export async function initSDK(): Promise<void> {
         sessionStorage.removeItem('shadownotes_gpu_crash');
       }
     } catch (err) {
-      console.warn('[ShadowNotes] LlamaCPP registration failed, retrying with CPU:', err);
+      log.warning(`LlamaCPP registration failed, retrying with CPU: ${err}`);
       // GPU crashed -- force CPU and retry
       if (typeof sessionStorage !== 'undefined') {
         sessionStorage.setItem('shadownotes_gpu_crash', '1');
@@ -165,7 +187,7 @@ export async function initSDK(): Promise<void> {
     try {
       await ONNX.register();
     } catch (err) {
-      console.warn('[ShadowNotes] ONNX registration failed (audio features unavailable):', err);
+      log.warning(`ONNX registration failed (audio features unavailable): ${err}`);
     }
 
     // Register model definitions with the SDK
@@ -173,20 +195,48 @@ export async function initSDK(): Promise<void> {
 
     // Detect and cache device capabilities
     _capabilities = await detectCapabilities();
-    console.info(
-      '[ShadowNotes] SDK initialized | WebGPU:',
-      _capabilities.hasWebGPU,
-      '| SIMD:',
-      _capabilities.hasWASMSIMD,
-      '| Memory:',
-      _capabilities.deviceMemoryGB + 'GB',
-      '| Cores:',
-      _capabilities.hardwareConcurrency,
-    );
+    log.info(`SDK initialized | WebGPU: ${_capabilities.hasWebGPU} | SIMD: ${_capabilities.hasWASMSIMD} | Memory: ${_capabilities.deviceMemoryGB}GB | Cores: ${_capabilities.hardwareConcurrency}`);
   })();
 
   return _initPromise;
 }
+
+// ── Voice Agent Factory ──────────────────────────────────────
+
+/**
+ * Create a pre-configured VoiceAgent for hands-free operation.
+ * Uses VoicePipeline to orchestrate AudioCapture -> VAD -> STT -> LLM -> TTS.
+ *
+ * Returns a VoiceAgentSession that callers can use to process voice turns,
+ * or throws if the SDK's ONNX models are not available.
+ */
+export async function createVoiceAgent(systemPrompt: string): Promise<{
+  session: InstanceType<typeof VoiceAgentSession>;
+  pipeline: VoicePipeline;
+  destroy: () => void;
+}> {
+  // Create the high-level VoicePipeline for streaming turns
+  const pipeline = new VoicePipeline();
+
+  // Create the lower-level VoiceAgentSession for model management
+  const session = await VoiceAgent.create();
+
+  return {
+    session,
+    pipeline,
+    /** Convenience: tear down both session and pipeline. */
+    destroy() {
+      try { pipeline.cancel(); } catch { /* safe */ }
+      try { session.destroy(); } catch { /* safe */ }
+    },
+  };
+}
+
+export type {
+  VoicePipelineCallbacks,
+  VoicePipelineOptions,
+  VoicePipelineTurnResult,
+} from '@runanywhere/web';
 
 // ── Re-exports ──────────────────────────────────────────────
 // Every symbol that other files in the app may need, grouped by package.
@@ -201,6 +251,7 @@ export {
   EventBus,
   VoicePipeline,
   VoiceAgent,
+  VoiceAgentSession,
   SDKLogger,
   LLMFramework,
   AccelerationPreference,

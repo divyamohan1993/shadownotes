@@ -1,8 +1,116 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { DOMAINS } from '../domains';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelCategory } from '@runanywhere/web';
 import type { DomainProfile, DomainId } from '../types';
+
+const ONBOARDING_KEY = 'shadownotes-onboarded';
+
+const ONBOARDING_STEPS = [
+  {
+    title: 'WELCOME, OPERATIVE',
+    body: 'Welcome to ShadowNotes \u2014 your zero-trust AI notebook. All processing happens on your device. No data ever leaves your browser.',
+    icon: '\uD83D\uDD12',
+  },
+  {
+    title: 'SELECT YOUR DOMAIN',
+    body: 'Select a domain to start. Each domain has AI-tuned extraction for specific use cases: Security Audits, Legal Depositions, Medical Notes, or Incident Reports.',
+    icon: '\uD83C\uDFAF',
+  },
+  {
+    title: 'CAPTURE INTELLIGENCE',
+    body: 'Speak or type your notes. The AI extracts structured intelligence in real-time. Everything is encrypted with AES-256-GCM.',
+    icon: '\uD83C\uDF99\uFE0F',
+  },
+] as const;
+
+function Onboarding({ onComplete }: { onComplete: () => void }) {
+  const [step, setStep] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const nextBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Focus management: focus the dialog on mount and on step change
+  useEffect(() => {
+    nextBtnRef.current?.focus();
+  }, [step]);
+
+  const finish = useCallback(() => {
+    try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch { /* quota */ }
+    onComplete();
+  }, [onComplete]);
+
+  const advance = useCallback(() => {
+    if (step < ONBOARDING_STEPS.length - 1) {
+      setStep((s) => s + 1);
+    } else {
+      finish();
+    }
+  }, [step, finish]);
+
+  // Keyboard: Escape to skip, Enter/Space for Next
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        finish();
+      }
+      // Enter/Space only when the dialog itself or its children are focused
+      if ((e.key === 'Enter' || e.key === ' ') && dialogRef.current?.contains(document.activeElement)) {
+        // Don't double-fire if a button is focused (it handles its own click)
+        if (document.activeElement?.tagName !== 'BUTTON') {
+          e.preventDefault();
+          advance();
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [advance, finish]);
+
+  const current = ONBOARDING_STEPS[step];
+  const isLast = step === ONBOARDING_STEPS.length - 1;
+
+  return (
+    <div className="onboarding-backdrop" aria-hidden="false">
+      <div
+        ref={dialogRef}
+        className="onboarding-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Onboarding step ${step + 1} of ${ONBOARDING_STEPS.length}: ${current.title}`}
+        tabIndex={-1}
+      >
+        <div className="onboarding-step-indicator" aria-hidden="true">
+          {ONBOARDING_STEPS.map((_, i) => (
+            <span key={i} className={`onboarding-dot ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`} />
+          ))}
+        </div>
+
+        <div className="onboarding-icon" aria-hidden="true">{current.icon}</div>
+        <h2 className="onboarding-title">{current.title}</h2>
+        <p className="onboarding-body">{current.body}</p>
+
+        <div className="onboarding-actions">
+          <button className="onboarding-btn-skip" onClick={finish} aria-label="Skip onboarding">
+            SKIP
+          </button>
+          <button
+            ref={nextBtnRef}
+            className="onboarding-btn-next"
+            onClick={advance}
+            aria-label={isLast ? 'Begin using ShadowNotes' : `Go to step ${step + 2}`}
+          >
+            {isLast ? 'BEGIN' : 'NEXT'}
+          </button>
+        </div>
+
+        <div className="onboarding-hint" aria-hidden="true">
+          ESC to skip {'\u00B7'} ENTER to continue
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   onStart: (domain: DomainProfile) => void;
@@ -11,6 +119,9 @@ interface Props {
 }
 
 export function SessionInit({ onStart, onSearch, onImport }: Props) {
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try { return !localStorage.getItem(ONBOARDING_KEY); } catch { return false; }
+  });
   const [selected, setSelected] = useState<DomainId | null>(null);
   const { state: llmState, progress: llmProgress, ensure: ensureLLM } = useModelLoader(ModelCategory.Language);
 
@@ -29,6 +140,7 @@ export function SessionInit({ onStart, onSearch, onImport }: Props) {
 
   return (
     <div className="init-screen" role="main" aria-label="ShadowNotes domain selection">
+      {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
       <div className="init-header">
         <div className="stamp stamp-classified" aria-hidden="true">CLASSIFIED</div>
         <h1 className="init-title">SHADOW NOTES</h1>

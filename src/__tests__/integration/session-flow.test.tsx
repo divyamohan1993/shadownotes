@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 // Mock SDK modules
 vi.mock('../../runanywhere', () => ({
   initSDK: vi.fn(async () => {}),
+  getRecommendedPreset: vi.fn(() => 'medium'),
   ModelManager: {
     getModels: vi.fn(() => []),
   },

@@ -8,6 +8,7 @@ import { usePerfConfig } from '../perfConfig';
 import { parseVoiceCommand, type VoiceCommand } from '../voiceCommands';
 import { startVoskCapture, preloadModel, type VoskSession } from '../voskEngine';
 import { generateWithOllama, checkOllamaAvailability } from '../ollamaEngine';
+import type { VoicePipelineCallbacks } from '../runanywhere';
 import type { SessionData, TranscriptEntry, IntelligenceItem, DomainProfile } from '../types';
 
 // RunAnywhere SDK hooks — these are created by parallel agents and may not exist yet.
@@ -34,6 +35,7 @@ let useEmbeddings: () => {
   isAvailable: boolean;
   deduplicate: (items: IntelligenceItem[], threshold?: number) => Promise<IntelligenceItem[]>;
   findSimilar: (query: string, items: IntelligenceItem[], topK?: number) => Promise<IntelligenceItem[]>;
+  buildRAGContext: (query: string, priorItems: IntelligenceItem[], topK?: number) => Promise<string>;
 };
 let extractWithTools: (text: string, domain: DomainProfile, systemPrompt: string) => Promise<IntelligenceItem[]>;
 
@@ -68,6 +70,7 @@ try {
     isAvailable: false,
     deduplicate: async (items: IntelligenceItem[]) => items,
     findSimilar: async () => [],
+    buildRAGContext: async () => '',
   });
 }
 
@@ -76,6 +79,20 @@ try {
   ({ extractWithTools } = require('../toolExtraction'));
 } catch {
   extractWithTools = async () => [];
+}
+
+// Voice Agent SDK features — loaded dynamically so tests pass without ONNX WASM
+let createVoiceAgent: (systemPrompt: string) => Promise<{ pipeline: { processTurn: Function; cancel: () => void }; destroy: () => void }>;
+let AudioCaptureClass: new (config?: { sampleRate?: number; channels?: number }) => { start: (onChunk?: (samples: Float32Array) => void, onLevel?: (level: number) => void) => Promise<void>; stop: () => void; isCapturing: boolean };
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ra = require('../runanywhere');
+  createVoiceAgent = ra.createVoiceAgent;
+  AudioCaptureClass = ra.AudioCapture;
+} catch {
+  createVoiceAgent = async () => { throw new Error('Voice Agent requires RunAnywhere ONNX models'); };
+  AudioCaptureClass = class { async start() { throw new Error('AudioCapture unavailable'); } stop() {} get isCapturing() { return false; } } as any;
 }
 
 const isElectron = !!(window as any).electronAPI?.isElectron || navigator.userAgent.includes('Electron');
@@ -94,7 +111,7 @@ interface Props {
 }
 
 type CaptureState = 'idle' | 'listening' | 'extracting';
-type CaptureMode = 'voice' | 'text';
+type CaptureMode = 'voice' | 'text' | 'agent';
 
 function parseLLMResponse(response: string, categories: string[]): IntelligenceItem[] {
   const items: IntelligenceItem[] = [];
@@ -157,6 +174,13 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const lastInterimUpdateRef = useRef(0);
   const extractionAbortRef = useRef<AbortController | null>(null);
 
+  // Voice Agent state
+  const [agentActive, setAgentActive] = useState(false);
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const voiceAgentRef = useRef<{ destroy: () => void; pipeline: { processTurn: Function; cancel: () => void } } | null>(null);
+  const agentCaptureRef = useRef<{ stop: () => void } | null>(null);
+  const agentLoopRef = useRef(false);
+
   // Transcript deduplication refs
   const lastFinalTextRef = useRef('');
   const lastFinalTimeRef = useRef(0);
@@ -217,7 +241,7 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
     }
   }, [perfConfig.ollamaEnabled]);
 
-  // Cleanup on unmount — stop all capture engines and TTS
+  // Cleanup on unmount — stop all capture engines, TTS, and voice agent
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();
@@ -225,18 +249,53 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
       extractionAbortRef.current?.abort();
       try { tts.stop(); } catch { /* safe to ignore if TTS not initialized */ }
       try { audioPipeline.stopCapture(); } catch { /* safe to ignore */ }
+      agentLoopRef.current = false;
+      try { agentCaptureRef.current?.stop(); } catch { /* safe to ignore */ }
+      try { voiceAgentRef.current?.destroy(); } catch { /* safe to ignore */ }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Build the extraction prompt, optionally with prior session context
-  const buildPrompt = useCallback((text: string, domain: DomainProfile): { userPrompt: string; systemPrompt: string } => {
+  // Build the extraction prompt, optionally with prior session context.
+  // When embeddings are available, uses RAG retrieval to inject only the most
+  // semantically relevant prior findings instead of the full text blob.
+  const buildPrompt = useCallback(async (text: string, domain: DomainProfile): Promise<{ userPrompt: string; systemPrompt: string }> => {
     const catList = domain.categories.join(', ');
     const hasPrior = !!session.priorContext;
     let userPrompt = '';
 
     if (hasPrior) {
-      userPrompt += `Known facts from prior sessions in this case:\n${session.priorContext}\n\n`;
+      let contextBlock = session.priorContext!;
+
+      // RAG enhancement: use semantic retrieval when embeddings are available
+      if (embeddings.isAvailable) {
+        try {
+          // Parse prior context lines into IntelligenceItem objects for RAG ranking
+          const priorItems: IntelligenceItem[] = [];
+          for (const line of session.priorContext!.split('\n')) {
+            const match = line.match(/^\[([^\]]+)\]\s*(.+)/);
+            if (match) {
+              priorItems.push({
+                id: crypto.randomUUID(),
+                category: match[1],
+                content: match[2].trim(),
+                timestamp: '',
+              });
+            }
+          }
+          if (priorItems.length > 0) {
+            const ragContext = await embeddings.buildRAGContext(text, priorItems);
+            if (ragContext) {
+              contextBlock = ragContext;
+            }
+          }
+        } catch (err) {
+          console.warn('[ShadowNotes] RAG context retrieval failed, falling back to full text:', err);
+          // Fall through to use the original priorContext text
+        }
+      }
+
+      userPrompt += `Known facts from prior sessions in this case:\n${contextBlock}\n\n`;
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -261,11 +320,11 @@ Example:
     }
 
     return { userPrompt, systemPrompt };
-  }, [session.priorContext]);
+  }, [session.priorContext, embeddings]);
 
   // Ollama extraction helper
   const tryOllamaExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
-    const { userPrompt, systemPrompt } = buildPrompt(text, domain);
+    const { userPrompt, systemPrompt } = await buildPrompt(text, domain);
     try {
       const { text: response } = await generateWithOllama(userPrompt, systemPrompt, perfConfig.ollamaModel);
       return parseLLMResponse(response, domain.categories);
@@ -297,7 +356,7 @@ Example:
     llmBusyRef.current = true;
     setStreamingText('');
     try {
-      const { userPrompt, systemPrompt } = buildPrompt(text, domain);
+      const { userPrompt, systemPrompt } = await buildPrompt(text, domain);
 
       // Use StructuredOutput to validate extraction format awareness
       const hasStructuredSupport = typeof StructuredOutput?.extractJson === 'function';
@@ -428,6 +487,82 @@ Example:
       console.warn('[ShadowNotes] TTS feedback failed:', err);
     }
   }, [tts]);
+
+  // Voice Agent: start hands-free mode
+  const startVoiceAgent = useCallback(async () => {
+    setAgentError(null);
+    try {
+      const agent = await createVoiceAgent(session.domain.systemPrompt);
+      voiceAgentRef.current = agent;
+
+      // Set up AudioCapture to feed audio into the pipeline
+      const capture = new AudioCaptureClass({ sampleRate: 16000, channels: 1 });
+      agentCaptureRef.current = capture;
+      agentLoopRef.current = true;
+
+      // Callbacks for the VoicePipeline turn-based processing
+      const callbacks: VoicePipelineCallbacks = {
+        onTranscription: (text: string) => {
+          const timestamp = getTimestamp();
+          onAddTranscript({ text, timestamp });
+          // Feed transcript into extraction pipeline
+          extractWithFallback(text).then((items) => {
+            if (items.length > 0) {
+              onAddIntelligence(items);
+              speakExtractionSummary(items.length);
+            }
+          });
+        },
+        onError: (err: Error) => {
+          console.warn('[ShadowNotes] Voice agent pipeline error:', err);
+          setAgentError(err.message);
+        },
+      };
+
+      // Start audio capture; each chunk is processed through the pipeline
+      await capture.start(
+        async (audioData: Float32Array) => {
+          if (!agentLoopRef.current) return;
+          try {
+            await agent.pipeline.processTurn(audioData, {
+              systemPrompt: session.domain.systemPrompt,
+              maxTokens: 256,
+            }, callbacks);
+          } catch (err) {
+            console.warn('[ShadowNotes] Voice agent turn error:', err);
+          }
+        },
+      );
+
+      setAgentActive(true);
+    } catch (err) {
+      console.warn('[ShadowNotes] Voice agent failed to start:', err);
+      setAgentError('Voice Agent requires RunAnywhere ONNX models');
+      setAgentActive(false);
+      voiceAgentRef.current = null;
+      agentCaptureRef.current = null;
+    }
+  }, [session.domain.systemPrompt, onAddTranscript, extractWithFallback, onAddIntelligence, speakExtractionSummary]);
+
+  // Voice Agent: stop hands-free mode
+  const stopVoiceAgent = useCallback(() => {
+    agentLoopRef.current = false;
+    try { agentCaptureRef.current?.stop(); } catch { /* safe */ }
+    agentCaptureRef.current = null;
+    try { voiceAgentRef.current?.destroy(); } catch { /* safe */ }
+    voiceAgentRef.current = null;
+    setAgentActive(false);
+    setAgentError(null);
+  }, []);
+
+  // Cleanup voice agent on unmount
+  useEffect(() => {
+    return () => {
+      agentLoopRef.current = false;
+      try { agentCaptureRef.current?.stop(); } catch { /* safe */ }
+      try { voiceAgentRef.current?.destroy(); } catch { /* safe */ }
+    };
+  }, []);
 
   const startEdit = useCallback((item: IntelligenceItem) => {
     setEditingId(item.id);
@@ -643,6 +778,13 @@ Example:
     voskSessionRef.current?.stop();
     voskSessionRef.current = null;
     extractionAbortRef.current?.abort();
+    // Stop voice agent if active
+    agentLoopRef.current = false;
+    try { agentCaptureRef.current?.stop(); } catch { /* safe */ }
+    agentCaptureRef.current = null;
+    try { voiceAgentRef.current?.destroy(); } catch { /* safe */ }
+    voiceAgentRef.current = null;
+    setAgentActive(false);
     // Stop TTS if speaking during session end
     try { tts.stop(); } catch { /* safe */ }
     const fullText = flushAccumulated();
@@ -656,6 +798,12 @@ Example:
 
   const handleDiscard = useCallback(() => {
     extractionAbortRef.current?.abort();
+    agentLoopRef.current = false;
+    try { agentCaptureRef.current?.stop(); } catch { /* safe */ }
+    agentCaptureRef.current = null;
+    try { voiceAgentRef.current?.destroy(); } catch { /* safe */ }
+    voiceAgentRef.current = null;
+    setAgentActive(false);
     try { tts.stop(); } catch { /* safe */ }
     onDiscardSession?.();
   }, [onDiscardSession, tts]);
@@ -760,6 +908,16 @@ Example:
                 <p>Type your notes below and submit to extract intelligence</p>
               </div>
             )}
+            {session.transcripts.length === 0 && captureMode === 'agent' && !agentActive && (
+              <div className="empty-state-capture">
+                <p>Start the Voice Agent for hands-free capture and extraction</p>
+              </div>
+            )}
+            {session.transcripts.length === 0 && captureMode === 'agent' && agentActive && (
+              <div className="empty-state-capture">
+                <p>Voice Agent listening... speak naturally</p>
+              </div>
+            )}
             {session.transcripts.map((t, i) => (
               <div key={`${t.timestamp}-${i}`} className="transcript-entry">
                 <span className="transcript-time">[{t.timestamp}]</span>
@@ -778,8 +936,9 @@ Example:
           <div className="capture-controls">
             {/* Mode toggle */}
             <div className="capture-mode-toggle">
-              <button className={`capture-mode-btn ${captureMode === 'voice' ? 'active' : ''}`} onClick={() => setCaptureMode('voice')}>MIC</button>
-              <button className={`capture-mode-btn ${captureMode === 'text' ? 'active' : ''}`} onClick={() => setCaptureMode('text')}>TEXT</button>
+              <button className={`capture-mode-btn ${captureMode === 'voice' ? 'active' : ''}`} onClick={() => { if (agentActive) stopVoiceAgent(); setCaptureMode('voice'); }}>MIC</button>
+              <button className={`capture-mode-btn ${captureMode === 'text' ? 'active' : ''}`} onClick={() => { if (agentActive) stopVoiceAgent(); setCaptureMode('text'); }}>TEXT</button>
+              <button className={`capture-mode-btn ${captureMode === 'agent' ? 'active' : ''}`} onClick={() => { setCaptureMode('agent'); }}>AGENT</button>
             </div>
 
             {captureMode === 'voice' ? (
@@ -823,6 +982,37 @@ Example:
                   </button>
                 )}
               </>
+            ) : captureMode === 'agent' ? (
+              <div className="voice-agent-panel" role="region" aria-label="Voice Agent controls">
+                {agentError && (
+                  <div className="capture-error" role="alert" style={{ marginBottom: '0.5rem' }}>
+                    <span>[AGENT]</span> {agentError}
+                    <button onClick={() => setAgentError(null)} aria-label="Dismiss agent error">{'\u2715'}</button>
+                  </div>
+                )}
+
+                {agentActive ? (
+                  <>
+                    <div className="voice-agent-status" aria-live="polite">
+                      <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
+                      <span>Voice Agent Active &mdash; Speak naturally</span>
+                    </div>
+                    <button className="btn-capture btn-capture-decode" onClick={stopVoiceAgent} aria-label="Stop voice agent">
+                      STOP AGENT
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="voice-agent-status">
+                      <span>Hands-free voice capture with automatic intelligence extraction</span>
+                    </div>
+                    <button className="btn-capture" onClick={startVoiceAgent} aria-label="Start voice agent">
+                      <span className={perfConfig.animationsEnabled ? 'rec-dot' : 'rec-dot-static'} />
+                      START VOICE AGENT
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
               <div className="text-input-panel">
                 <textarea

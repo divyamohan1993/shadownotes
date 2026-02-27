@@ -1,5 +1,9 @@
 import { app, BrowserWindow, session } from 'electron';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ── NVIDIA 940 MX / GPU Force Flags ─────────────────────────────────────
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -27,8 +31,7 @@ function createWindow() {
     minHeight: 600,
     title: 'SHADOW NOTES — Classified',
     backgroundColor: '#0a0e1a',
-    show: true,
-    icon: path.join(__dirname, '../build/icon.png'),
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
@@ -37,6 +40,22 @@ function createWindow() {
       webSecurity: false,
     },
   });
+
+  // Show window once content is ready (avoids blank flash)
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+
+  // Fallback: if ready-to-show doesn't fire within 5s, force show
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.warn('[ShadowNotes] ready-to-show did not fire, forcing show');
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.openDevTools();
+    }
+  }, 5000);
 
   // COOP/COEP headers for SharedArrayBuffer
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -57,11 +76,14 @@ function createWindow() {
     console.log('[ShadowNotes] Loading:', indexPath);
     mainWindow.loadFile(indexPath).catch((err) => {
       console.error('[ShadowNotes] Failed to load index.html:', err);
+      mainWindow?.show();
+      mainWindow?.webContents.openDevTools();
     });
   }
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
     console.error('[ShadowNotes] Page load failed:', errorCode, errorDescription);
+    mainWindow?.show();
     mainWindow?.webContents.openDevTools();
   });
 

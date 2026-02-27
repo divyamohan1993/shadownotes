@@ -1,11 +1,13 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import electron from 'vite-plugin-electron/simple';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
+const isElectron = process.env.BUILD_TARGET === 'electron';
 
 function copyWasmPlugin(): Plugin {
   const llamacppWasm = path.resolve(__dir, 'node_modules/@runanywhere/web-llamacpp/wasm');
@@ -38,36 +40,60 @@ export default defineConfig({
   plugins: [
     react(),
     copyWasmPlugin(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['icons/**/*'],
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,wasm,ico,png,svg,woff,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-css',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+
+    // Electron main + preload (only for desktop builds)
+    ...(isElectron
+      ? [
+          electron({
+            main: {
+              entry: 'electron/main.ts',
             },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+            preload: {
+              input: 'electron/preload.ts',
             },
-          },
-        ],
-      },
-      manifest: false,
-    }),
+          }),
+        ]
+      : []),
+
+    // PWA only for web builds (service workers conflict with Electron's file:// protocol)
+    ...(!isElectron
+      ? [
+          VitePWA({
+            registerType: 'autoUpdate',
+            includeAssets: ['icons/**/*'],
+            workbox: {
+              globPatterns: ['**/*.{js,css,html,wasm,ico,png,svg,woff,woff2}'],
+              maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+              runtimeCaching: [
+                {
+                  urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+                  handler: 'CacheFirst',
+                  options: {
+                    cacheName: 'google-fonts-css',
+                    expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                    cacheableResponse: { statuses: [0, 200] },
+                  },
+                },
+                {
+                  urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+                  handler: 'CacheFirst',
+                  options: {
+                    cacheName: 'google-fonts-webfonts',
+                    expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                    cacheableResponse: { statuses: [0, 200] },
+                  },
+                },
+              ],
+            },
+            manifest: false,
+          }),
+        ]
+      : []),
   ],
+
+  // Electron loads from file:// — all asset paths must be relative
+  base: isElectron ? './' : '/',
+
   server: {
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

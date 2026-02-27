@@ -3,7 +3,11 @@ node_modules
 
 # Build output
 dist
+dist-electron
 .vite
+
+# Electron packaging
+release/
 
 # Environment
 *.local

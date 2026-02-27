@@ -228,6 +228,10 @@ function AppInner() {
             unsub();
             setModelProgress(1);
           }
+          // Load the model into the inference engine so it's ready on first use
+          if (!ModelManager.getLoadedModel(ModelCategory.Language)) {
+            await ModelManager.loadModel(model.id, { coexist: true });
+          }
         }
         // Phase 6: Preload ONNX audio models (STT, TTS, VAD) for voice features
         setBootPhase(6);

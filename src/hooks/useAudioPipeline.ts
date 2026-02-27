@@ -16,6 +16,7 @@ import {
   STT,
   SpeechActivity,
 } from '@runanywhere/web-onnx';
+import { ModelManager, ModelCategory } from '@runanywhere/web';
 import type {
   AudioChunkCallback,
   AudioLevelCallback,
@@ -76,7 +77,8 @@ export function useAudioPipeline(): AudioPipelineResult {
 
   // ── Availability check ────────────────────────────────────
   // We consider the pipeline "available" when the ONNX backend is registered
-  // and an STT model is loaded. Checked once on mount.
+  // and both an STT model and VAD are loaded. Re-checks after a delay in
+  // case models are still being loaded during the boot sequence.
   useEffect(() => {
     mountedRef.current = true;
 
@@ -85,16 +87,22 @@ export function useAudioPipeline(): AudioPipelineResult {
         // STT.isModelLoaded throws if ONNX was never registered
         const sttReady = STT.isModelLoaded;
         const vadReady = VAD.isInitialized;
-        setIsAvailable(sttReady && vadReady);
+        if (mountedRef.current) setIsAvailable(sttReady && vadReady);
       } catch {
-        setIsAvailable(false);
+        if (mountedRef.current) setIsAvailable(false);
       }
     };
 
     check();
 
+    // Re-check after short delays — boot preload may still be in progress
+    const t1 = setTimeout(check, 2_000);
+    const t2 = setTimeout(check, 5_000);
+
     return () => {
       mountedRef.current = false;
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, []);
 
@@ -128,8 +136,14 @@ export function useAudioPipeline(): AudioPipelineResult {
   const startCapture = useCallback(async () => {
     setError(null);
 
-    // Re-check availability at call time
+    // Re-check availability at call time; attempt lazy load if needed
     try {
+      if (!STT.isModelLoaded) {
+        try { await ModelManager.ensureLoaded(ModelCategory.SpeechRecognition, { coexist: true }); } catch { /* best effort */ }
+      }
+      if (!VAD.isInitialized) {
+        try { await ModelManager.ensureLoaded(ModelCategory.Audio, { coexist: true }); } catch { /* best effort */ }
+      }
       if (!STT.isModelLoaded || !VAD.isInitialized) {
         setError('STT or VAD model not loaded. Load models before capturing.');
         return;

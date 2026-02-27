@@ -9,6 +9,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TTS, AudioPlayback } from '@runanywhere/web-onnx';
+import { ModelManager, ModelCategory } from '@runanywhere/web';
 
 // ── Public Interface ────────────────────────────────────────
 
@@ -36,14 +37,24 @@ export function useTTS(): TTSResult {
   useEffect(() => {
     mountedRef.current = true;
 
-    try {
-      setIsAvailable(TTS.isVoiceLoaded);
-    } catch {
-      setIsAvailable(false);
-    }
+    const check = () => {
+      try {
+        if (mountedRef.current) setIsAvailable(TTS.isVoiceLoaded);
+      } catch {
+        if (mountedRef.current) setIsAvailable(false);
+      }
+    };
+
+    check();
+
+    // Re-check after a delay — models may still be loading during boot
+    const t1 = setTimeout(check, 2_000);
+    const t2 = setTimeout(check, 5_000);
 
     return () => {
       mountedRef.current = false;
+      clearTimeout(t1);
+      clearTimeout(t2);
 
       // Dispose playback resources on unmount
       const playback = playbackRef.current;
@@ -70,11 +81,21 @@ export function useTTS(): TTSResult {
   const speak = useCallback(async (text: string): Promise<void> => {
     if (!text.trim()) return;
 
-    // Check voice availability at call time
+    // Check voice availability at call time; lazy-load if needed
     try {
       if (!TTS.isVoiceLoaded) {
-        console.warn('[useTTS] No TTS voice loaded. Call TTS.loadVoice() first.');
-        return;
+        // Attempt lazy load via ModelManager — it handles the full lifecycle
+        // (download → OPFS → sherpa-onnx FS → TTS module init).
+        try {
+          await ModelManager.ensureLoaded(ModelCategory.SpeechSynthesis, { coexist: true });
+        } catch (loadErr) {
+          console.warn('[useTTS] Lazy TTS load failed:', loadErr);
+        }
+        if (!TTS.isVoiceLoaded) {
+          console.warn('[useTTS] No TTS voice available after load attempt.');
+          return;
+        }
+        if (mountedRef.current) setIsAvailable(true);
       }
     } catch {
       console.warn('[useTTS] TTS extension not available (ONNX not registered).');

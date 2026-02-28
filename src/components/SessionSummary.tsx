@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { DomainProfile, VaultSession, SessionContent, IntelligenceItem } from '../types';
+import type { DomainProfile, VaultSession, SessionContent, IntelligenceItem, VaultCase } from '../types';
+import { generatePrescriptionPdf, canGeneratePrescription } from '../prescriptionPdf';
 
 interface Props {
   domain: DomainProfile;
   vaultSession: VaultSession;
   content: SessionContent;
+  caseItem?: VaultCase;
   onUpdateIntelligence: (id: string, newContent: string) => void;
   onDeleteIntelligence: (id: string) => void;
   onDeleteSession: () => Promise<void>;
@@ -22,7 +24,7 @@ function getRelativeTime(timestampStr: string, sessionCreatedAt: number): string
   return `+${mm}:${ss}`;
 }
 
-export function SessionSummary({ domain, vaultSession, content, onUpdateIntelligence, onDeleteIntelligence, onDeleteSession, onBack }: Props) {
+export function SessionSummary({ domain, vaultSession, content, caseItem, onUpdateIntelligence, onDeleteIntelligence, onDeleteSession, onBack }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteCountdown, setDeleteCountdown] = useState(0);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -276,6 +278,15 @@ export function SessionSummary({ domain, vaultSession, content, onUpdateIntellig
           <button className="btn-back-case" onClick={onBack} aria-label="Back to case detail">
             BACK TO CASE
           </button>
+          {canGeneratePrescription(domain.id) && (
+            <button
+              className="btn-download-prescription"
+              onClick={() => generatePrescriptionPdf(domain, vaultSession, content, caseItem)}
+              aria-label="Download patient prescription as PDF"
+            >
+              DOWNLOAD PRESCRIPTION
+            </button>
+          )}
           <button
             className={`btn-copy-dossier ${copiedId === 'dossier' ? 'copied' : ''}`}
             onClick={() => handleCopy(dossierText, 'dossier')}

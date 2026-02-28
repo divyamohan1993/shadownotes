@@ -124,6 +124,29 @@ Built with pride in India. Built for the world.
 
 ---
 
+## Revenue Model — Or Lack Thereof
+
+**Built by humans, built for humans, for the spirit of making India an Aatmnirbhar Bharat.**
+
+ShadowNotes is not built to extract revenue — it is built to empower. The architecture itself ensures this:
+
+- **Zero server costs** — There are no servers. All AI runs on the user's device via WebAssembly. There is no cloud infrastructure to bill for.
+- **Zero per-query costs** — No API keys, no token billing, no subscriptions. Once the model is downloaded (~100–810 MB depending on selection), every extraction session is free, forever.
+- **Zero data monetization** — No user data is collected, transmitted, or stored anywhere except the user's own browser. There is nothing to monetize.
+- **Open source (MIT License)** — The entire codebase is freely available for anyone to use, modify, and distribute.
+
+This is a deliberate choice. India's physicians, security professionals, legal practitioners, and incident responders deserve world-class AI tools without being held hostage to cloud subscriptions, data harvesting, or vendor lock-in.
+
+The value ShadowNotes creates is measured not in revenue, but in:
+- **Lives protected** through better medical documentation in rural clinics
+- **National security strengthened** through air-gapped vulnerability auditing
+- **Justice served** through accurate, private deposition records
+- **Communities safeguarded** through systematic incident response
+
+This is the Aatmnirbhar model: self-reliant technology that costs nothing to operate, depends on no external service, and serves the people who need it most.
+
+---
+
 ## Links
 
 | Resource | URL |

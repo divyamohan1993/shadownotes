@@ -79,7 +79,7 @@ Mic → AudioCapture (16kHz) → VAD (Silero) → STT (Whisper) → LLM (Gemma 3
 
 > "ShadowNotes is free, open source, MIT license. Zero server costs because there are no servers. Zero API costs because there are no APIs. After one model download, every extraction session costs nothing, forever."
 
-> "We built this in under a week — two students from GGSIPU Delhi, orchestrated by Claude. This is Atmanirbhar Bharat in practice: Indian talent plus AI tools equals world-class output."
+> "We built this in under a week — two students from Shoolini University, orchestrated by Claude. This is Atmanirbhar Bharat in practice: Indian talent plus AI tools equals world-class output."
 
 > "6 million Indian professionals are waiting for a tool that respects their data sovereignty. The technology is ready."
 

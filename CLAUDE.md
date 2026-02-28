@@ -4,7 +4,7 @@
 
 ShadowNotes is an offline-first, encrypted field intelligence app. Voice → on-device AI → structured intelligence items. Zero network transmission of user data. Built for the RunAnywhere Vibe Challenge hackathon.
 
-**Team:** Vibe With Singularity (Divya Mohan, Kumkum Thakur) — GGSIPU, Delhi
+**Team:** Vibe With Singularity (Divya Mohan, Kumkum Thakur) — Shoolini University
 
 ## Quick Reference
 

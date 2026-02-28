@@ -275,7 +275,7 @@ Each domain has:
 
 - **Team**: Vibe With Singularity
 - **Members**: Divya Mohan (Team Lead), Kumkum Thakur
-- **Institution**: GGSIPU, Delhi
+- **Institution**: Shoolini University
 - **Hackathon**: RunAnywhere Vibe Challenge (facilitated by ThoughtWorks Technologies)
 - **Vision**: Atmanirbhar Bharat / #India2047 — technology self-reliance through on-device AI
 - **Repository**: [github.com/divyamohan1993/shadownotes](https://github.com/divyamohan1993/shadownotes)

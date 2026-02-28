@@ -318,8 +318,8 @@ This is the kind of infrastructure that enables India's developers to build AI a
 
 | Member | Role | Institution |
 |--------|------|-------------|
-| **Divya Mohan** | Team Lead, Architecture, Full-Stack Development, Vision | GGSIPU, Delhi |
-| **Kumkum Thakur** | Design, Testing, Documentation, UX | GGSIPU, Delhi |
+| **Divya Mohan** | Team Lead, Architecture, Full-Stack Development, Vision | Shoolini University |
+| **Kumkum Thakur** | Design, Testing, Documentation, UX | Shoolini University |
 
 ### Development Orchestration
 

@@ -12,7 +12,7 @@
 The first on-device AI notebook for air-gapped intelligence work.
 
 - **Team**: Vibe With Singularity (dmj.one)
-- **Members**: Divya Mohan & Kumkum Thakur | GGSIPU, Delhi
+- **Members**: Divya Mohan & Kumkum Thakur | Shoolini University
 - **Orchestrated by**: Claude (Anthropic)
 - **Hackathon**: RunAnywhere Vibe Challenge | ThoughtWorks Technologies
 - **Vision**: Atmanirbhar Bharat | #India2047

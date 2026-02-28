@@ -275,6 +275,6 @@ MIT
 
 ---
 
-Built with the spirit of **Atmanirbhar Bharat** for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) Hackathon, facilitated by **ThoughtWorks Technologies**, by [Divya Mohan](https://github.com/divyamohan1993) & Kumkum Thakur (GGSIPU, Delhi). **#India2047**
+Built with the spirit of **Atmanirbhar Bharat** for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) Hackathon, facilitated by **ThoughtWorks Technologies** and **GGSIPU, Delhi**, by [Divya Mohan](https://github.com/divyamohan1993) & Kumkum Thakur (Shoolini University). **#India2047**
 
 *ShadowNotes: Because some notes should never exist anywhere but your memory — and some technology should never depend on anyone but your own device.*

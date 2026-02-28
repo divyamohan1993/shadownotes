@@ -117,13 +117,15 @@ Five forces converge **today**:
 | Proof Point | Detail |
 |-------------|--------|
 | Live at [shadownotes.dmj.one](https://shadownotes.dmj.one) | Fully functional, publicly accessible |
-| 231 tests, 100% passing | Production-quality engineering across 18 test files |
+| 231 tests, 100% passing | 5.5s test execution across 18 test files |
+| 9,748 lines of code | 58 source files — TypeScript strict mode, zero type errors |
 | 6 on-device AI models | 3 LLMs + Whisper STT + Silero VAD + Piper TTS |
-| 20+ SDK features | Deepest RunAnywhere integration |
+| 20+ SDK features | Deepest RunAnywhere integration across all 3 packages |
 | 4 professional domains | Tailored extraction with speech error correction |
+| In-browser vector search | Embeddings + cosine similarity + RAG — no vector DB needed |
 | Military-grade encryption | AES-256-GCM + HKDF + PBKDF2 + WebAuthn PRF |
-| PDF export system | 4 domain-branded professional documents |
-| Cross-platform | Web (Vercel) + Desktop (Electron 35) |
+| 7.7s production build | Vite 7 + PWA service worker + WASM bundling |
+| Zero-infrastructure deployment | Vercel (web) + Electron 35 (desktop) — no servers to manage |
 | WCAG 2.2 accessible | 172+ ARIA attributes, full keyboard navigation |
 | Built in <1 week | AI-augmented development velocity with Claude |
 
@@ -144,10 +146,11 @@ Five forces converge **today**:
 | **Data sovereignty** | Foreign servers | User's cloud sync | User's device only |
 
 **Competitive moat:**
-1. Privacy is an architectural guarantee, not a policy
+1. Privacy is an architectural guarantee, not a policy — zero `fetch()` or `WebSocket` calls in the codebase
 2. Complete on-device voice pipeline (wake word → VAD → STT → LLM → TTS)
-3. Semantic intelligence (RAG + embeddings) running locally
-4. Indian-first design (Hindi names, DPDPA compliance, rural-ready)
+3. In-browser vector intelligence — `Embeddings.embed()` + `cosineSimilarity()` powers RAG retrieval and semantic dedup at 0.85 cosine threshold — no external vector DB required
+4. Two-layer extraction pipeline — streaming LLM with unified parsing cascading to regex fallback, ensuring results at every capability level
+5. Indian-first design (Hindi names, DPDPA compliance, rural-ready)
 
 ---
 

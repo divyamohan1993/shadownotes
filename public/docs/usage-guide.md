@@ -83,9 +83,15 @@ When entering a passphrase, a real-time **strength indicator** rates it as WEAK,
 
 ### Step 3: Begin Session
 
-Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (Gemma 3 1B Instruct, ~810MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
+Select a domain and click **"BEGIN CAPTURE SESSION"**. You can also choose your preferred LLM model from 3 tiers:
 
-A progress bar shows download status. The model is cached in your browser's private filesystem (OPFS), so subsequent sessions skip the download.
+| Model | Size | Best For |
+|-------|------|----------|
+| **Gemma 3 1B** | ~810 MB | Highest quality extraction (default) |
+| **Qwen2.5 0.5B** | ~400 MB | Balanced — good extraction on mid-range devices |
+| **SmolLM2 135M** | ~100 MB | Lightweight — fast download, works on low-resource devices |
+
+The selected LLM begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads. A progress bar shows download status. Models are cached in your browser's private filesystem (OPFS), so subsequent sessions skip the download. You can switch models at any time.
 
 ### Step 4: Active Capture
 
@@ -153,6 +159,19 @@ The dossier view presents a complete summary:
    - "Session destroyed. No trace remains."
 4. You return to the domain selection screen. All data is permanently gone.
 
+### PDF Export
+
+From the Session Summary screen, click the download button to export a professionally formatted PDF. Each domain generates a unique document:
+
+| Domain | Button Label | PDF Branding |
+|--------|-------------|-------------|
+| Medical | DOWNLOAD PRESCRIPTION | **Sanjeevani** — "The Life-Giving Herb" |
+| Security | DOWNLOAD AUDIT REPORT | **Kavach** — "The Divine Shield" |
+| Legal | DOWNLOAD DEPOSITION | **Nyaaya** — "The Path of Justice" |
+| Incident | DOWNLOAD INCIDENT REPORT | **Prahari** — "The Vigilant Sentinel" |
+
+PDFs include headers with Hindi-named branding, metadata grids, categorized intelligence findings, and signature blocks.
+
 ### Voice Commands
 
 Say **"Hey Shadow"** followed by a command:
@@ -213,12 +232,12 @@ Return to the session init screen and re-download models. This can happen if OPF
 ## Running Tests
 
 ```bash
-npx vitest run        # Run all 227 tests
+npx vitest run        # Run all 231 tests
 npm run test:watch    # Watch mode (re-runs on file changes)
 npm run test:coverage # Generate coverage report
 ```
 
-Test suite includes 227 tests across 17 files:
+Test suite includes 231 tests across 18 files:
 - 61 domain tests (profiles, case number generation, system prompts)
 - 21 extraction tests (keyword-based intelligence extraction)
 - 11 hook tests (model loader state machine)

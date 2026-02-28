@@ -251,7 +251,7 @@
     <div class="meta-grid">
       <div class="meta-item">
         <span class="meta-label">Project</span>
-        <span class="meta-value">ShadowNotes v1.0.0</span>
+        <span class="meta-value">ShadowNotes v1.3.1</span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Classification</span>
@@ -266,12 +266,20 @@
         <span class="meta-value">RunAnywhere Vibe Challenge</span>
       </div>
       <div class="meta-item">
+        <span class="meta-label">Vision</span>
+        <span class="meta-value">Atmanirbhar Bharat / #India2047</span>
+      </div>
+      <div class="meta-item">
         <span class="meta-label">Team</span>
         <span class="meta-value">Divya Mohan &amp; Kumkum Thakur</span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Institution</span>
         <span class="meta-value">GGSIPU, Delhi</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Facilitated By</span>
+        <span class="meta-value">ThoughtWorks Technologies</span>
       </div>
     </div>
 
@@ -352,36 +360,36 @@
         <div class="domain-card">
           <div class="domain-card-header">
             <span class="domain-card-icon">&#x1F6E1;</span>
-            <span class="domain-card-title">Security Audit</span>
+            <span class="domain-card-title">Security Audit &mdash; Kavach</span>
           </div>
-          <div class="domain-card-codename">OPERATION FIREWALL</div>
+          <div class="domain-card-codename">OPERATION FIREWALL &bull; &ldquo;The Divine Shield&rdquo;</div>
           <div class="domain-card-clearance">TOP SECRET</div>
           <div class="domain-card-categories">Extracts: <span>Vulnerabilities, Timeline, Evidence, Affected Systems, Risk Assessment</span></div>
         </div>
         <div class="domain-card">
           <div class="domain-card-header">
             <span class="domain-card-icon">&#x2696;</span>
-            <span class="domain-card-title">Legal Deposition</span>
+            <span class="domain-card-title">Legal Deposition &mdash; Nyaaya</span>
           </div>
-          <div class="domain-card-codename">OPERATION TESTIMONY</div>
+          <div class="domain-card-codename">OPERATION TESTIMONY &bull; &ldquo;The Path of Justice&rdquo;</div>
           <div class="domain-card-clearance">CONFIDENTIAL</div>
           <div class="domain-card-categories">Extracts: <span>Key Statements, Timeline, Parties Involved, Contradictions, Exhibits</span></div>
         </div>
         <div class="domain-card">
           <div class="domain-card-header">
             <span class="domain-card-icon">&#x1FA7A;</span>
-            <span class="domain-card-title">Medical Notes</span>
+            <span class="domain-card-title">Medical Notes &mdash; Sanjeevani</span>
           </div>
-          <div class="domain-card-codename">OPERATION VITALS</div>
+          <div class="domain-card-codename">OPERATION VITALS &bull; &ldquo;The Life-Giving Herb&rdquo;</div>
           <div class="domain-card-clearance">RESTRICTED</div>
           <div class="domain-card-categories">Extracts: <span>Symptoms, Diagnoses, Medications, Vital Signs, Follow-up Actions</span></div>
         </div>
         <div class="domain-card">
           <div class="domain-card-header">
             <span class="domain-card-icon">&#x1F6A8;</span>
-            <span class="domain-card-title">Incident Report</span>
+            <span class="domain-card-title">Incident Report &mdash; Prahari</span>
           </div>
-          <div class="domain-card-codename">OPERATION CHRONICLE</div>
+          <div class="domain-card-codename">OPERATION CHRONICLE &bull; &ldquo;The Vigilant Sentinel&rdquo;</div>
           <div class="domain-card-clearance">SECRET</div>
           <div class="domain-card-categories">Extracts: <span>Incident Timeline, Witnesses, Damage Assessment, Root Cause, Next Steps</span></div>
         </div>
@@ -493,6 +501,21 @@
           <div class="feature-desc">RunAnywhere SDK: All 3 packages (web, web-llamacpp, web-onnx) &mdash; 20+ genuinely load-bearing features including LLM streaming, ToolCalling, Embeddings, STT, TTS, VAD, AudioCapture, and AudioPlayback.</div>
         </div>
         <div class="feature-card">
+          <div class="feature-icon">&#x1F4C4;</div>
+          <div class="feature-title">Professional PDF Export</div>
+          <div class="feature-desc">Domain-specific PDFs via jsPDF with Hindi branding: <strong>Sanjeevani</strong> (Medical), <strong>Kavach</strong> (Security), <strong>Nyaaya</strong> (Legal), <strong>Prahari</strong> (Incident). Signature blocks, metadata grids, and colour-coded sections.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F4BB;</div>
+          <div class="feature-title">Desktop App (Electron)</div>
+          <div class="feature-desc">Cross-platform desktop via Electron 35 with GPU acceleration, WebAuthn support, and native packaging for Windows, macOS, and Linux.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#x1F9E0;</div>
+          <div class="feature-title">Multi-Model Selection</div>
+          <div class="feature-desc">Choose from 3 LLM tiers: Gemma 3 1B (~810 MB), Qwen2.5 0.5B (~400 MB), SmolLM2 135M (~100 MB). Match AI quality to your device&rsquo;s capability.</div>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon">&#x267F;</div>
           <div class="feature-title">WCAG 2.2 Accessible</div>
           <div class="feature-desc">172+ ARIA attributes, full keyboard navigation, screen-reader support, reduced-motion and forced-colors media queries.</div>
@@ -513,18 +536,22 @@
           <tr><th>Component</th><th>Technology</th><th>Purpose</th></tr>
         </thead>
         <tbody>
-          <tr><td>Framework</td><td>React 19 + TypeScript (strict)</td><td>UI rendering and state management</td></tr>
-          <tr><td>Build Tool</td><td>Vite 7 + ESLint</td><td>Development server, bundling, code quality</td></tr>
-          <tr><td>AI SDK (core)</td><td>@runanywhere/web</td><td>ModelManager, EventBus, OPFSStorage</td></tr>
+          <tr><td>Framework</td><td>React 19 + TypeScript 5.9 (strict)</td><td>UI rendering and state management</td></tr>
+          <tr><td>Build Tool</td><td>Vite 7 + ESLint 10</td><td>Development server, bundling, code quality</td></tr>
+          <tr><td>AI SDK (core)</td><td>@runanywhere/web v0.1.0-beta.9</td><td>ModelManager, EventBus, OPFSStorage, VoicePipeline, VoiceAgent, SDKLogger</td></tr>
           <tr><td>AI SDK (LLM)</td><td>@runanywhere/web-llamacpp</td><td>Streaming LLM, StructuredOutput, ToolCalling, Embeddings</td></tr>
-          <tr><td>AI SDK (Audio)</td><td>@runanywhere/web-onnx</td><td>STT, TTS, VAD, AudioCapture, AudioPlayback</td></tr>
-          <tr><td>LLM Model</td><td>Gemma 3 1B Instruct Q4_K_M</td><td>Streaming extraction via llama.cpp WASM</td></tr>
-          <tr><td>STT</td><td>Web Speech API</td><td>Browser-native speech-to-text transcription</td></tr>
-          <tr><td>Encryption</td><td>AES-256-GCM + HKDF + PBKDF2</td><td>Per-case encryption for vault storage</td></tr>
-          <tr><td>Auth</td><td>WebAuthn + PRF extension</td><td>Biometric authentication + key derivation</td></tr>
+          <tr><td>AI SDK (Audio)</td><td>@runanywhere/web-onnx</td><td>STT (Whisper), TTS (Piper), VAD (Silero), AudioCapture, AudioPlayback</td></tr>
+          <tr><td>LLM Models</td><td>Gemma 3 1B / Qwen2.5 0.5B / SmolLM2 135M</td><td>3-tier model selection for all device capabilities</td></tr>
+          <tr><td>STT</td><td>Whisper Tiny English (ONNX) + Web Speech API</td><td>On-device speech-to-text with browser fallback</td></tr>
+          <tr><td>VAD</td><td>Silero VAD (ONNX, ~2.3 MB)</td><td>Real-time voice activity detection</td></tr>
+          <tr><td>TTS</td><td>Piper (Lessac, ONNX, ~64 MB)</td><td>On-device text-to-speech for voice feedback</td></tr>
+          <tr><td>Encryption</td><td>AES-256-GCM + HKDF + PBKDF2 (600K iter)</td><td>Per-case encryption via WebCrypto API</td></tr>
+          <tr><td>Auth</td><td>WebAuthn + PRF extension</td><td>Biometric auth (Windows Hello / Touch ID / Face ID)</td></tr>
+          <tr><td>PDF Export</td><td>jsPDF 4.2</td><td>Domain PDFs: Sanjeevani, Kavach, Nyaaya, Prahari</td></tr>
+          <tr><td>Desktop</td><td>Electron 35 + electron-builder</td><td>Cross-platform desktop with GPU acceleration</td></tr>
           <tr><td>Fallback</td><td>Keyword Extraction Engine</td><td>Instant regex-based intelligence extraction</td></tr>
-          <tr><td>Offline</td><td>Service Worker (PWA)</td><td>Full offline support after first load</td></tr>
-          <tr><td>Testing</td><td>Vitest + Testing Library</td><td>227 tests across 17 files</td></tr>
+          <tr><td>Offline</td><td>vite-plugin-pwa + Workbox</td><td>Full offline PWA with service worker caching</td></tr>
+          <tr><td>Testing</td><td>Vitest 4 + Testing Library</td><td>231 tests across 18 files</td></tr>
         </tbody>
       </table>
     </section>
@@ -549,6 +576,9 @@
         </a>
         <a href="https://github.com/divyamohan1993/shadownotes/blob/main/docs/architecture.md" class="link-btn" target="_blank" rel="noopener">
           <span class="icon">&#x1F3D7;</span> Architecture
+        </a>
+        <a href="https://github.com/divyamohan1993/shadownotes/blob/main/docs/vision-india2047.md" class="link-btn" target="_blank" rel="noopener">
+          <span class="icon">&#x1F1EE;&#x1F1F3;</span> India 2047 Vision
         </a>
       </div>
     </section>
@@ -585,12 +615,15 @@
         <span style="color: var(--text-dim);">&#x2502;</span>
         <div class="status-dot"></div>
         <span class="footer-text">Zero Network Dependency</span>
+        <span style="color: var(--text-dim);">&#x2502;</span>
+        <div class="status-dot"></div>
+        <span class="footer-text">Atmanirbhar Bharat</span>
       </div>
       <div class="footer-copy">
-        Built for the <a href="https://vibechallenge.runanywhere.org/" target="_blank" rel="noopener">RunAnywhere Vibe Challenge</a> Hackathon
+        Built for the <a href="https://vibechallenge.runanywhere.org/" target="_blank" rel="noopener">RunAnywhere Vibe Challenge</a> Hackathon &bull; Facilitated by ThoughtWorks Technologies &bull; #India2047
       </div>
       <div class="footer-copy" style="margin-top: 0.25rem;">
-        &copy; 2026 Divya Mohan &amp; Kumkum Thakur &bull; MIT License
+        &copy; 2026 Divya Mohan &amp; Kumkum Thakur (GGSIPU, Delhi) &bull; MIT License
       </div>
     </footer>
 

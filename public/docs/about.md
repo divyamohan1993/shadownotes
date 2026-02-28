@@ -6,6 +6,18 @@ ShadowNotes is a real-time intelligence extraction system that runs entirely in 
 
 ---
 
+## The Vision — Atmanirbhar Bharat and India 2047
+
+ShadowNotes embodies the spirit of **Atmanirbhar Bharat** (Self-Reliant India) and the **#India2047** vision. Built for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) hackathon, facilitated by **ThoughtWorks Technologies**, this project proves that AI-powered tools for sensitive domains can run entirely on-device — no cloud dependency, no data leaving the user's control.
+
+As **Prof. Yoshua Bengio** (Turing Award 2018, Université de Montréal) emphasized at the **AI Impact Summit**, responsible AI requires privacy by design and data governance. ShadowNotes answers this call: every byte of AI processing — LLM extraction, speech recognition, voice synthesis, semantic search — runs locally via WebAssembly.
+
+Each domain carries a Hindi name: **Sanjeevani** (Medical — "The Life-Giving Herb"), **Kavach** (Security — "The Divine Shield"), **Nyaaya** (Legal — "The Path of Justice"), **Prahari** (Incident — "The Vigilant Sentinel"). These names appear in the PDF export system, where jsPDF generates domain-specific professional documents.
+
+> Read the full vision: [About the Hackathon & India 2047 Vision](vision-india2047.md)
+
+---
+
 ## The Problem
 
 Professionals handling sensitive information — security auditors, attorneys, physicians, incident responders — need AI-powered note-taking. But sending that data to cloud servers is a non-starter:
@@ -114,27 +126,36 @@ Each domain has:
 
 | Technology | Purpose |
 |------------|---------|
-| **RunAnywhere Web SDK** (`@runanywhere/web`) | Core framework: RunAnywhere.initialize(), ModelManager, EventBus, OPFSStorage |
-| **RunAnywhere LlamaCPP** (`@runanywhere/web-llamacpp`) | Streaming LLM via TextGeneration.generateStream(), StructuredOutput, advanced sampling |
-| **Gemma 3 1B Instruct** (Q4_K_M) | On-device language model for structured extraction |
-| **Web Speech API** | Browser-native continuous speech recognition |
-| **WebAuthn + PRF** | Biometric authentication with key material derivation |
-| **AES-256-GCM + HKDF** | Per-case encryption for vault storage |
-| **WebGPU / shader-f16** | GPU acceleration for WASM inference (CPU fallback) |
-| **OPFS** (Origin Private File System) | Browser-local model caching (~810MB, persists across sessions) |
+| **RunAnywhere Web SDK** (`@runanywhere/web` v0.1.0-beta.9) | Core: RunAnywhere.initialize(), ModelManager, EventBus, OPFSStorage, SDKLogger, VoicePipeline, VoiceAgent, detectCapabilities() |
+| **RunAnywhere LlamaCPP** (`@runanywhere/web-llamacpp` v0.1.0-beta.9) | Streaming LLM via TextGeneration.generateStream(), StructuredOutput, ToolCalling, Embeddings — llama.cpp WASM |
+| **RunAnywhere ONNX** (`@runanywhere/web-onnx` v0.1.0-beta.9) | On-device STT (Whisper), TTS (Piper), VAD (Silero), AudioCapture, AudioPlayback — ONNX WASM |
+| **Gemma 3 1B Instruct** (Q4_K_M, ~810 MB) | Primary on-device LLM for structured extraction |
+| **Qwen2.5 0.5B Instruct** (Q4_K_M, ~400 MB) | Balanced LLM for mid-range devices |
+| **SmolLM2 135M Instruct** (Q4_K_M, ~100 MB) | Lightweight LLM for low-resource devices |
+| **Whisper Tiny English** (int8, ~103 MB) | On-device speech-to-text via ONNX runtime |
+| **Silero VAD** (~2.3 MB) | On-device voice activity detection via ONNX runtime |
+| **Piper (Lessac Medium)** (~64 MB) | On-device text-to-speech via ONNX runtime |
+| **Web Speech API** | Browser-native fallback speech recognition |
+| **WebAuthn + PRF** | Biometric authentication (Windows Hello / Touch ID / Face ID) with key material derivation |
+| **AES-256-GCM + HKDF + PBKDF2** | Per-case encryption, random per-vault salt, 600K iterations — via WebCrypto API |
+| **jsPDF 4.2** | PDF export with domain-specific Hindi branding (Sanjeevani, Kavach, Nyaaya, Prahari) |
+| **WebGPU / shader-f16** | GPU acceleration for WASM inference (automatic CPU fallback with crash recovery) |
+| **OPFS** (Origin Private File System) | Browser-local model caching (persists across sessions) |
 | **SharedArrayBuffer** | Multi-threaded WASM execution (requires COOP/COEP headers) |
 | **React 19** | UI framework with hooks-based state management |
-| **TypeScript** (strict) | Type-safe codebase with ESLint |
+| **TypeScript 5.9** (strict) | Type-safe codebase |
+| **ESLint 10** + typescript-eslint | Code quality with React Hooks linting |
 | **Vite 7** | Build tool with custom WASM copy plugin |
-| **vite-plugin-pwa** | Progressive Web App with full offline support |
-| **Vitest** | Test framework (227 tests across 17 files) |
+| **vite-plugin-pwa** | Progressive Web App with Workbox offline caching |
+| **Electron 35** + electron-builder | Cross-platform desktop app with GPU flags and WebAuthn support |
+| **Vitest 4** + Testing Library | 231 tests across 18 files — unit, component, integration, e2e |
 
 ### Browser Requirements
 
-- Chrome 96+ or Edge 96+ (for Web Speech API + SharedArrayBuffer)
+- Chrome 96+ or Edge 96+ (for WebAssembly SIMD + SharedArrayBuffer)
 - Microphone access
-- ~810MB storage for model cache (OPFS)
-- ~810MB RAM for inference
+- ~100–810 MB storage for model cache (OPFS), depending on LLM selection
+- 2 GB+ RAM for inference
 
 ---
 
@@ -255,10 +276,13 @@ Each domain has:
 - **Team**: Vibe With Singularity
 - **Members**: Divya Mohan (Team Lead), Kumkum Thakur
 - **Institution**: GGSIPU, Delhi
-- **Hackathon**: RunAnywhere Vibe Challenge
+- **Hackathon**: RunAnywhere Vibe Challenge (facilitated by ThoughtWorks Technologies)
+- **Vision**: Atmanirbhar Bharat / #India2047 — technology self-reliance through on-device AI
 - **Repository**: [github.com/divyamohan1993/shadownotes](https://github.com/divyamohan1993/shadownotes)
 - **Live Demo**: [shadownotes.dmj.one](https://shadownotes.dmj.one)
+- **Alternate URL**: [vibe-with-singularity.vercel.app](https://vibe-with-singularity.vercel.app)
+- **About the Hackathon & Vision**: [vision-india2047.md](vision-india2047.md)
 
 ---
 
-*ShadowNotes: Because some notes should never exist anywhere but your memory.*
+*ShadowNotes: Because some notes should never exist anywhere but your memory — and some technology should never depend on anyone but your own device. **#India2047***

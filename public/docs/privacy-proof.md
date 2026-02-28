@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-ShadowNotes uses a fully on-device AI architecture that keeps all sensitive processing local. Intelligence extraction runs through a two-layer pipeline: a single LLM generation with unified parsing (`TextGeneration.generateStream()` + `StructuredOutput.extractJson()`), and instant keyword regex fallback — all on-device. The pipeline also includes embeddings-based semantic deduplication, on-device voice activity detection (VAD), on-device speech-to-text (STT) via ONNX when available (graceful fallback to Web Speech API), and on-device text-to-speech (TTS) for voice feedback. All session data is encrypted at rest with AES-256-GCM (with random per-vault PBKDF2 salt) and authenticated via WebAuthn biometrics. The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing features. No user data is sent to any external server by the application code.
+Built with the spirit of **Atmanirbhar Bharat** and the **#India2047** vision, ShadowNotes uses a fully on-device AI architecture that keeps all sensitive processing local — aligning with India's Digital Personal Data Protection Act (DPDPA 2023) and global privacy standards. Intelligence extraction runs through a two-layer pipeline: a single LLM generation with unified parsing (`TextGeneration.generateStream()` + `StructuredOutput.extractJson()`), and instant keyword regex fallback — all on-device. The pipeline also includes embeddings-based semantic deduplication, on-device voice activity detection (VAD), on-device speech-to-text (STT) via ONNX when available (graceful fallback to Web Speech API), and on-device text-to-speech (TTS) for voice feedback. All session data is encrypted at rest with AES-256-GCM (with random per-vault PBKDF2 salt) and authenticated via WebAuthn biometrics. The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing features. No user data is sent to any external server by the application code.
 
 ---
 
@@ -282,7 +282,7 @@ grep -r "analytics\|telemetry\|tracking" src/                    # ZERO matches
 ### Step 5: Automated Test Verification
 
 ```bash
-npx vitest run    # Run all 227 tests
+npx vitest run    # Run all 231 tests
 ```
 
 Tests verify:

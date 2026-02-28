@@ -4,7 +4,8 @@
       "Bash(git mv:*)",
       "Bash(npx vite build)",
       "Bash(npx tsc -b --noEmit)",
-      "Bash(npm run electron:package)"
+      "Bash(npm run electron:package)",
+      "mcp__Cloudflare_Developer_Platform__search_cloudflare_documentation"
     ]
   }
 }

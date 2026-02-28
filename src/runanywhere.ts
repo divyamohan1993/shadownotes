@@ -105,15 +105,15 @@ const MODELS: CompactModelDef[] = [
     modality: ModelCategory.SpeechRecognition,
     memoryRequirement: 110_000_000,
   },
-  // TTS — Piper English voice (~63 MB)
+  // TTS — Piper English voice (archive includes model + espeak-ng-data for phonemization)
   {
-    id: 'piper-tts-en-amy-low',
-    name: 'Piper English (Amy)',
-    repo: 'csukuangfj/vits-piper-en_US-amy-low',
-    files: ['en_US-amy-low.onnx', 'tokens.txt'],
+    id: 'vits-piper-en_US-lessac-medium',
+    name: 'Piper English (Lessac)',
+    url: 'https://github.com/RunanywhereAI/sherpa-onnx/releases/download/runanywhere-models-v1/vits-piper-en_US-lessac-medium.tar.gz',
     framework: LLMFramework.PiperTTS,
     modality: ModelCategory.SpeechSynthesis,
-    memoryRequirement: 70_000_000,
+    memoryRequirement: 100_000_000,
+    artifactType: 'archive',
   },
 ];
 
@@ -358,7 +358,7 @@ export interface OnnxPreloadEvent {
 const ONNX_MODEL_META: Record<string, { label: 'VAD' | 'STT' | 'TTS'; name: string; size: string; category: ModelCategory }> = {
   'silero-vad': { label: 'VAD', name: 'Silero Voice Activity Detection', size: '2.3 MB', category: ModelCategory.Audio },
   'whisper-tiny-en': { label: 'STT', name: 'Whisper Tiny English', size: '103 MB', category: ModelCategory.SpeechRecognition },
-  'piper-tts-en-amy-low': { label: 'TTS', name: 'Piper English (Amy)', size: '63 MB', category: ModelCategory.SpeechSynthesis },
+  'vits-piper-en_US-lessac-medium': { label: 'TTS', name: 'Piper English (Lessac)', size: '64 MB', category: ModelCategory.SpeechSynthesis },
 };
 
 /**
@@ -473,12 +473,12 @@ export async function preloadONNXModels(
     onProgress?.({ model: 'STT', modelName: 'Whisper Tiny English', modelSize: '103 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
-  // TTS: Piper English voice (~63 MB on first run, cached after)
+  // TTS: Piper English voice (~64 MB archive on first run, cached after)
   try {
     await downloadAndLoadOnnxModel(ModelCategory.SpeechSynthesis, onProgress);
   } catch (err) {
     log.warning(`TTS preload failed: ${err}`);
-    onProgress?.({ model: 'TTS', modelName: 'Piper English (Amy)', modelSize: '63 MB', state: 'error', progress: 0, cached: false, error: String(err) });
+    onProgress?.({ model: 'TTS', modelName: 'Piper English (Lessac)', modelSize: '64 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // Final refresh to capture all states

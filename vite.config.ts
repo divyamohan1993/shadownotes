@@ -117,6 +117,14 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'credentialless',
     },
+    proxy: {
+      '/api/proxy/tts': {
+        target: 'https://github.com/RunanywhereAI/sherpa-onnx/releases/download/runanywhere-models-v1',
+        changeOrigin: true,
+        rewrite: (p: string) => p.replace(/^\/api\/proxy\/tts/, ''),
+        followRedirects: true,
+      },
+    },
   },
   assetsInclude: ['**/*.wasm'],
   worker: { format: 'es' },

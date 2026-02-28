@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { DomainProfile, VaultSession, SessionContent, IntelligenceItem, VaultCase } from '../types';
-import { generatePrescriptionPdf, canGeneratePrescription } from '../prescriptionPdf';
+import { generateSessionPdf, getDownloadLabel } from '../prescriptionPdf';
 
 interface Props {
   domain: DomainProfile;
@@ -278,15 +278,13 @@ export function SessionSummary({ domain, vaultSession, content, caseItem, onUpda
           <button className="btn-back-case" onClick={onBack} aria-label="Back to case detail">
             BACK TO CASE
           </button>
-          {canGeneratePrescription(domain.id) && (
-            <button
-              className="btn-download-prescription"
-              onClick={() => generatePrescriptionPdf(domain, vaultSession, content, caseItem)}
-              aria-label="Download patient prescription as PDF"
-            >
-              DOWNLOAD PRESCRIPTION
-            </button>
-          )}
+          <button
+            className="btn-download-report"
+            onClick={() => generateSessionPdf(domain, vaultSession, content, caseItem)}
+            aria-label={`Download ${getDownloadLabel(domain.id).toLowerCase()}`}
+          >
+            {getDownloadLabel(domain.id)}
+          </button>
           <button
             className={`btn-copy-dossier ${copiedId === 'dossier' ? 'copied' : ''}`}
             onClick={() => handleCopy(dossierText, 'dossier')}

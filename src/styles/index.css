@@ -3642,7 +3642,7 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--green-secure);
   color: var(--green-secure);
 }
-.btn-download-prescription {
+.btn-download-report {
   padding: 0.5rem 1.2rem;
   background: linear-gradient(135deg, rgba(39, 174, 96, 0.15), rgba(39, 174, 96, 0.05));
   border: 1px solid var(--green-secure);
@@ -3655,7 +3655,7 @@ input:focus, textarea:focus, select:focus {
   cursor: pointer;
   transition: all var(--transition-fast);
 }
-.btn-download-prescription:hover {
+.btn-download-report:hover {
   background: var(--green-glow);
   box-shadow: 0 0 12px var(--green-glow);
 }

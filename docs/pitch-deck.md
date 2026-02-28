@@ -1,6 +1,6 @@
-# ShadowNotes — Guy Kawasaki 10-Slide Pitch
+# ShadowNotes — Pitch
 
-*10 slides. 20 minutes. 30-point font. The Aatmnirbhar pitch.*
+*The Aatmnirbhar pitch.*
 
 ---
 
@@ -12,7 +12,7 @@
 The first on-device AI notebook for air-gapped intelligence work.
 
 - **Team**: Vibe With Singularity (dmj.one)
-- **Members**: Divya Mohan & Kumkum Thakur | GGSIPU, Delhi
+- **Members**: Divya Mohan & Kumkum Thakur | Shoolini University, Himachal Pradesh
 - **Orchestrated by**: Claude (Anthropic)
 - **Hackathon**: RunAnywhere Vibe Challenge | ThoughtWorks Technologies
 - **Vision**: Atmanirbhar Bharat | #India2047
@@ -165,7 +165,7 @@ Five forces converge **today**:
 | **Claude (Anthropic)** | AI Development Partner | Orchestrated architecture, implementation, testing, and docs. Enabled 10x development velocity. |
 
 **Why this team wins:**
-- Two students from GGSIPU Delhi + AI orchestration built what traditionally needs 10+ engineers over months
+- Two students from Shoolini University + AI orchestration built what traditionally needs 10+ engineers over months
 - This IS the Aatmnirbhar model — Indian talent + AI tools = world-class output
 - dmj.one's mission: "Dream Manifest and Journey Together as One"
 

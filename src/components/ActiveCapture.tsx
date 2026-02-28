@@ -37,7 +37,7 @@ let useEmbeddings: () => {
   findSimilar: (query: string, items: IntelligenceItem[], topK?: number) => Promise<IntelligenceItem[]>;
   buildRAGContext: (query: string, priorItems: IntelligenceItem[], topK?: number) => Promise<string>;
 };
-let extractWithTools: (text: string, domain: DomainProfile, systemPrompt: string) => Promise<IntelligenceItem[]>;
+
 
 // Graceful dynamic imports — fall back to no-op stubs if modules are not yet available
 try {
@@ -74,12 +74,6 @@ try {
   });
 }
 
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ({ extractWithTools } = require('../toolExtraction'));
-} catch {
-  extractWithTools = async () => [];
-}
 
 // Voice Agent SDK features — loaded dynamically so tests pass without ONNX WASM
 let createVoiceAgent: (systemPrompt: string) => Promise<{ pipeline: { processTurn: Function; cancel: () => void }; destroy: () => void }>;
@@ -470,37 +464,19 @@ Example:
     }
   }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt, embeddings]);
 
-  // Shared extraction: try LLM first, then tool extraction, then fall back to keywords
+  // Shared extraction: single LLM generation, multiple parsing strategies, regex fallback
   const extractWithFallback = useCallback(async (text: string): Promise<IntelligenceItem[]> => {
     if (!text) return [];
 
-    // Primary path: LLM streaming extraction
+    // Single LLM generation — parse results from the one response
     if (perfConfig.llmEnabled && llmReadyRef.current) {
       const llmItems = await tryLLMExtraction(text, session.domain);
       if (llmItems.length > 0) return llmItems;
     }
 
-    // Secondary path: tool-based extraction via RunAnywhere SDK ToolCalling
-    try {
-      const toolItems = await extractWithTools(text, session.domain, session.domain.systemPrompt);
-      if (toolItems.length > 0) {
-        // Deduplicate tool-extracted items if embeddings are available
-        if (embeddings.isAvailable) {
-          try {
-            return await embeddings.deduplicate(toolItems);
-          } catch (err) {
-            console.warn('[ShadowNotes] Embeddings dedup failed for tool extraction:', err);
-          }
-        }
-        return toolItems;
-      }
-    } catch (err) {
-      console.warn('[ShadowNotes] Tool extraction failed:', err);
-    }
-
-    // Tertiary fallback: keyword-based extraction (always works, zero dependencies)
+    // Fallback: keyword-based extraction (always works, zero LLM calls)
     return extractIntelligence(text, session.domain.id);
-  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain, embeddings]);
+  }, [perfConfig.llmEnabled, tryLLMExtraction, session.domain]);
 
   // TTS voice feedback after extraction completes
   const speakExtractionSummary = useCallback((itemCount: number) => {

@@ -2,6 +2,28 @@
 
 All notable changes to ShadowNotes are documented in this file.
 
+## [1.3.0] - 2026-02-28
+
+### Added
+
+- **Global SDK Feature Readiness Tracker** — New event-driven system in `runanywhere.ts` (`getSDKFeatureStatus`, `onSDKFeatureChange`, `refreshSDKFeatureStatus`) that tracks which SDK features (LLM, STT, VAD, TTS, Embeddings) are loaded. Updated after each model load during boot, with listener-based notifications.
+- **`useSDKFeatures` Hook** — Reactive hook (`hooks/useSDKFeatures.ts`) that subscribes to the global readiness tracker. Provides instant badge updates when models finish loading, plus a 3s polling safety net for 30 seconds.
+- **E2E User Flow Tests** — New integration test suite (`user-flow-e2e.test.tsx`) covering the full user journey: voice capture → STT → transcript display → LLM extraction → intelligence item rendering. Verifies no streaming text UI is rendered during extraction (regression guard against render spam).
+
+### Fixed
+
+- **SDK Badges Not Lighting Up** — STT, VAD, TTS, and EMB badges stayed grey because the per-hook availability checks (`useAudioPipeline`, `useTTS`, `useEmbeddings`) only re-checked ONNX SDK properties at mount + 2s + 5s delays, missing the boot preload window. Badges now use global readiness state as a fallback alongside hook checks.
+- **`useEmbeddings` Never Re-checking** — `useMemo(() => Embeddings.isModelLoaded, [])` with empty deps checked availability exactly once at mount. Replaced with `useState` + `useEffect` that re-checks at 2s, 5s, and 10s intervals.
+- **UI Freeze During LLM Extraction** — Spinner stopped rotating and session timer froze because `for await (token of stream)` ran WASM token generation synchronously on the main thread without yielding. Now yields to the event loop every 4 tokens via `setTimeout(0)`, keeping CSS animations and timer callbacks responsive.
+
+### Testing
+
+- All 231 tests pass across 18 test files (4 new e2e tests added).
+- TypeScript strict mode: 0 errors.
+- Production build: clean.
+
+---
+
 ## [1.2.0] - 2026-02-28
 
 ### Added

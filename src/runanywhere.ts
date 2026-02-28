@@ -234,12 +234,46 @@ export async function initSDK(): Promise<void> {
 // ── ONNX Model Preloading ────────────────────────────────────
 
 /**
+ * Download and fully initialise a single ONNX model by category.
+ *
+ * ModelManager.ensureLoaded() handles the full lifecycle:
+ *   download → OPFS → sherpa-onnx FS → pluggable loader → module init.
+ *
+ * If ensureLoaded returns a model but the module readiness flag is still
+ * false, we fall back to a manual download + load via ModelManager to
+ * ensure the loader pipeline runs completely.
+ */
+async function downloadAndLoadModel(category: ModelCategory, coexist = true): Promise<void> {
+  // Primary path: ensureLoaded handles download + OPFS + sherpa-onnx FS + module init
+  const model = await ModelManager.ensureLoaded(category, { coexist });
+
+  // Verify the high-level module actually reports as ready.
+  // If ensureLoaded succeeded at the ModelManager level but the module
+  // state wasn't set (e.g. loader didn't run), force a load.
+  const ready = isModuleReady(category);
+  if (!ready && model) {
+    log.warning(`${category} module not ready after ensureLoaded — retrying via loadModel`);
+    await ModelManager.loadModel(model.id, { coexist });
+  }
+}
+
+/** Check whether the high-level ONNX module for a given category is ready. */
+function isModuleReady(category: ModelCategory): boolean {
+  try {
+    if (category === ModelCategory.Audio) return VAD.isInitialized;
+    if (category === ModelCategory.SpeechRecognition) return STT.isModelLoaded;
+    if (category === ModelCategory.SpeechSynthesis) return TTS.isVoiceLoaded;
+  } catch { /* module not available */ }
+  return false;
+}
+
+/**
  * Preload ONNX audio models (VAD, STT, TTS) so they are ready for
  * first use without an on-demand download pause.
  *
- * Uses ModelManager.ensureLoaded() which handles the full lifecycle:
- * download from HuggingFace → store in OPFS → write to sherpa-onnx FS → load.
- * After first preload, models are cached in OPFS and loaded instantly.
+ * Uses ModelManager.ensureLoaded() for the download/OPFS lifecycle, with a
+ * fallback to ModelManager.loadModel() if the module readiness flag is not
+ * set after the initial load attempt.
  */
 export async function preloadONNXModels(
   onProgress?: (step: string, done: boolean) => void,
@@ -247,7 +281,8 @@ export async function preloadONNXModels(
   // VAD: Silero Voice Activity Detection (~2.3 MB)
   try {
     onProgress?.('VAD', false);
-    await ModelManager.ensureLoaded(ModelCategory.Audio, { coexist: true });
+    await downloadAndLoadModel(ModelCategory.Audio);
+    refreshSDKFeatureStatus();
     onProgress?.('VAD', true);
   } catch (err) {
     log.warning(`VAD preload skipped: ${err}`);
@@ -257,7 +292,8 @@ export async function preloadONNXModels(
   // STT: Whisper Tiny English (~103 MB on first run, cached after)
   try {
     onProgress?.('STT', false);
-    await ModelManager.ensureLoaded(ModelCategory.SpeechRecognition, { coexist: true });
+    await downloadAndLoadModel(ModelCategory.SpeechRecognition);
+    refreshSDKFeatureStatus();
     onProgress?.('STT', true);
   } catch (err) {
     log.warning(`STT preload skipped: ${err}`);
@@ -267,13 +303,16 @@ export async function preloadONNXModels(
   // TTS: Piper English voice (~63 MB on first run, cached after)
   try {
     onProgress?.('TTS', false);
-    await ModelManager.ensureLoaded(ModelCategory.SpeechSynthesis, { coexist: true });
+    await downloadAndLoadModel(ModelCategory.SpeechSynthesis);
+    refreshSDKFeatureStatus();
     onProgress?.('TTS', true);
   } catch (err) {
     log.warning(`TTS preload skipped: ${err}`);
     onProgress?.('TTS', true);
   }
 
+  // Final refresh to capture all states
+  refreshSDKFeatureStatus();
   log.info('ONNX audio models preloaded (VAD + STT + TTS)');
 }
 
@@ -313,6 +352,72 @@ export type {
   VoicePipelineOptions,
   VoicePipelineTurnResult,
 } from '@runanywhere/web';
+
+// ── SDK Feature Readiness Tracking ──────────────────────────
+// Global readiness state that persists after boot. Hooks and UI components
+// can poll this synchronously to determine which SDK features are available,
+// without depending on delayed re-checks or ONNX property getters.
+
+export interface SDKFeatureStatus {
+  llm: boolean;
+  stt: boolean;
+  vad: boolean;
+  tts: boolean;
+  embeddings: boolean;
+}
+
+const _sdkFeatures: SDKFeatureStatus = {
+  llm: false,
+  stt: false,
+  vad: false,
+  tts: false,
+  embeddings: false,
+};
+
+type SDKFeatureListener = (status: SDKFeatureStatus) => void;
+const _featureListeners = new Set<SDKFeatureListener>();
+
+/** Get a snapshot of which SDK features are loaded and ready. */
+export function getSDKFeatureStatus(): SDKFeatureStatus {
+  return { ..._sdkFeatures };
+}
+
+/** Subscribe to SDK feature readiness changes. Returns unsubscribe function. */
+export function onSDKFeatureChange(listener: SDKFeatureListener): () => void {
+  _featureListeners.add(listener);
+  return () => { _featureListeners.delete(listener); };
+}
+
+/** Re-check all SDK feature readiness flags and notify listeners if changed. */
+export function refreshSDKFeatureStatus(): void {
+  let changed = false;
+  const check = (key: keyof SDKFeatureStatus, value: boolean) => {
+    if (_sdkFeatures[key] !== value) {
+      _sdkFeatures[key] = value;
+      changed = true;
+    }
+  };
+
+  // LLM: check if a language model is loaded
+  try {
+    check('llm', !!ModelManager.getLoadedModel(ModelCategory.Language));
+  } catch { check('llm', false); }
+
+  // ONNX features
+  try { check('vad', VAD.isInitialized); } catch { check('vad', false); }
+  try { check('stt', STT.isModelLoaded); } catch { check('stt', false); }
+  try { check('tts', TTS.isVoiceLoaded); } catch { check('tts', false); }
+
+  // Embeddings (LlamaCPP)
+  try { check('embeddings', Embeddings.isModelLoaded); } catch { check('embeddings', false); }
+
+  if (changed) {
+    const snapshot = { ..._sdkFeatures };
+    for (const fn of _featureListeners) {
+      try { fn(snapshot); } catch { /* listener error */ }
+    }
+  }
+}
 
 // ── Re-exports ──────────────────────────────────────────────
 // Every symbol that other files in the app may need, grouped by package.

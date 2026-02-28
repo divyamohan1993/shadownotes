@@ -64,9 +64,15 @@ export const ToolCalling = {
 };
 
 export const Embeddings = {
+  isModelLoaded: true,
   loadModel: vi.fn(async () => {}),
   embed: vi.fn(async () => ({
     embeddings: [{ data: new Float32Array(384), dimension: 384 }],
+    dimension: 384,
+    processingTimeMs: 50,
+  })),
+  embedBatch: vi.fn(async (texts: string[]) => ({
+    embeddings: texts.map(() => ({ data: new Float32Array(384), dimension: 384 })),
     dimension: 384,
     processingTimeMs: 50,
   })),

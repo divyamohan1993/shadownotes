@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
-import { initSDK, ModelManager, ModelCategory, OPFSStorage, preloadONNXModels } from './runanywhere';
+import { initSDK, ModelManager, ModelCategory, OPFSStorage, preloadONNXModels, refreshSDKFeatureStatus } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
@@ -228,6 +228,12 @@ function AppInner() {
             unsub();
             setModelProgress(1);
           }
+          // Load the model into the inference engine so it's ready on first use
+          if (!ModelManager.getLoadedModel(ModelCategory.Language)) {
+            await ModelManager.loadModel(model.id, { coexist: true });
+          }
+          // Update SDK feature readiness after LLM + embeddings are loaded
+          refreshSDKFeatureStatus();
         }
         // Phase 6: Preload ONNX audio models (STT, TTS, VAD) for voice features
         setBootPhase(6);

@@ -8,12 +8,16 @@ export const ONNX = {
 };
 
 export const STT = {
+  isModelLoaded: true,
+  loadModel: vi.fn(async () => {}),
   transcribe: vi.fn(async () => ({
     text: 'The server room access logs show unauthorized entry at 02:14 AM',
   })),
 };
 
 export const TTS = {
+  isVoiceLoaded: true,
+  loadVoice: vi.fn(async () => {}),
   synthesize: vi.fn(async () => ({
     audioData: new Float32Array(1600),
     sampleRate: 16000,
@@ -29,7 +33,10 @@ let _speechCallback: ((activity: SpeechActivity) => void) | null = null;
 let _speechSegment: { samples: Float32Array } | null = null;
 
 export const VAD = {
+  isInitialized: true,
+  init: vi.fn(async () => {}),
   reset: vi.fn(),
+  flush: vi.fn(),
   onSpeechActivity: vi.fn((cb: (activity: SpeechActivity) => void) => {
     _speechCallback = cb;
     return () => { _speechCallback = null; };
@@ -58,6 +65,8 @@ export const AudioCapture = vi.fn().mockImplementation(() => ({
     _audioLevelCallback = onLevel as any;
   }),
   stop: vi.fn(),
+  drainBuffer: vi.fn(() => new Float32Array(0)),
+  isCapturing: false,
   // Test helpers
   _simulateChunk: (chunk: Float32Array) => _audioStartCallback?.(chunk),
   _simulateLevel: (level: number) => _audioLevelCallback?.(level),
@@ -65,5 +74,9 @@ export const AudioCapture = vi.fn().mockImplementation(() => ({
 
 export const AudioPlayback = vi.fn().mockImplementation(() => ({
   play: vi.fn(async () => {}),
+  stop: vi.fn(),
   dispose: vi.fn(),
+  isPlaying: false,
 }));
+
+export const STTModelType = {};

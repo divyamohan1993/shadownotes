@@ -11,6 +11,7 @@ const isElectron = process.env.BUILD_TARGET === 'electron';
 
 function copyWasmPlugin(): Plugin {
   const llamacppWasm = path.resolve(__dir, 'node_modules/@runanywhere/web-llamacpp/wasm');
+  const onnxWasm = path.resolve(__dir, 'node_modules/@runanywhere/web-onnx/wasm/sherpa');
 
   return {
     name: 'copy-wasm',
@@ -30,6 +31,23 @@ function copyWasmPlugin(): Plugin {
         const srcPath = path.join(llamacppWasm, src);
         if (fs.existsSync(srcPath)) {
           fs.copyFileSync(srcPath, path.join(assetsDir, dest));
+        }
+      }
+
+      // Copy sherpa-onnx WASM + JS files for STT, TTS, VAD
+      const sherpaFiles = [
+        'sherpa-onnx.wasm',
+        'sherpa-onnx-glue.js',
+        'sherpa-onnx-asr.js',
+        'sherpa-onnx-tts.js',
+        'sherpa-onnx-vad.js',
+        'sherpa-onnx-wave.js',
+      ];
+
+      for (const file of sherpaFiles) {
+        const srcPath = path.join(onnxWasm, file);
+        if (fs.existsSync(srcPath)) {
+          fs.copyFileSync(srcPath, path.join(assetsDir, file));
         }
       }
     },

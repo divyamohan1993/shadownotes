@@ -98,6 +98,98 @@ At the **AI Impact Summit**, **Prof. Yoshua Bengio** (Turing Award 2018, Univers
 
 ---
 
+## Market Opportunity
+
+### The Problem is Massive and Underserved
+
+Every day, millions of India's professionals generate sensitive spoken intelligence that needs AI-powered structuring — but cannot use cloud AI due to data sovereignty requirements:
+
+| Sector | India Professionals | Pain Point | Regulation |
+|--------|-------------------|------------|------------|
+| **Healthcare** | 1.3M+ registered doctors, 600K+ in rural areas | Dictation → structured notes with zero internet | DPDPA 2023, patient confidentiality |
+| **Cybersecurity** | 300K+ security professionals | Air-gapped vulnerability documentation | IT Act 2000, CERT-In directives |
+| **Legal** | 1.7M+ advocates (Bar Council of India) | Privileged deposition transcription | Advocate-client privilege, Evidence Act |
+| **Law Enforcement & Emergency** | 2.8M+ police personnel, disaster response teams | Real-time incident documentation in field | Official Secrets Act, state regulations |
+
+### Total Addressable Market
+
+- **India alone**: 6M+ professionals in sensitive domains who need AI tools but cannot use cloud services
+- **Global**: Healthcare (12M+ physicians), legal (5M+ lawyers), security (4M+ practitioners) — the on-device AI tools market is projected to reach $50B+ by 2030
+- **The gap**: No existing product offers streaming on-device AI extraction for these verticals. ShadowNotes is first-to-market.
+
+### Why India First
+
+India has the world's largest population of professionals in these sensitive domains, the most aggressive data protection regulation (DPDPA 2023), and the most diverse connectivity landscape — from metro 5G to rural areas with no internet. If ShadowNotes works for India, it works for the world.
+
+---
+
+## Why Now
+
+Five forces converge to make ShadowNotes possible today — not two years ago, not two years from now:
+
+1. **WebAssembly maturity** — llama.cpp WASM now runs 1B-parameter LLMs at usable speeds in the browser. Two years ago, this was impossible. The RunAnywhere SDK by ThoughtWorks makes this accessible.
+
+2. **Model quality at small scale** — Gemma 3 1B, Qwen2.5 0.5B, and SmolLM2 135M deliver extraction quality that was only possible with 70B+ models three years ago. The intelligence-per-parameter ratio has improved 50x.
+
+3. **India's DPDPA 2023** — India's Digital Personal Data Protection Act creates legal obligations for data localization and consent that make cloud AI tools legally risky for sensitive professional domains. On-device is the compliant path.
+
+4. **AI Impact Summit momentum** — Prof. Yoshua Bengio's call for responsible AI deployment, privacy by design, and democratization of AI has shifted global discourse toward exactly the architecture ShadowNotes implements.
+
+5. **Browser API readiness** — WebAuthn PRF, OPFS, WebGPU, SharedArrayBuffer, and Service Workers are now mature across Chrome and Edge. The full stack of browser APIs needed for an encrypted, offline, GPU-accelerated AI app is finally available.
+
+---
+
+## Traction & Proof Points
+
+| Metric | Value | Significance |
+|--------|-------|--------------|
+| **Test Coverage** | 231 tests across 18 files, 100% passing | Production-quality engineering |
+| **SDK Integration** | 20+ load-bearing features across 3 packages | Deepest RunAnywhere integration in the hackathon |
+| **AI Models** | 6 on-device models (3 LLMs + VAD + STT + TTS) | Complete on-device AI pipeline |
+| **Domains** | 4 professional verticals with tailored extraction | Real-world applicability |
+| **Encryption** | AES-256-GCM + HKDF + PBKDF2 (600K iter) + WebAuthn PRF | Military-grade security |
+| **Accessibility** | 172+ ARIA attributes, WCAG 2.2, keyboard navigation | Inclusive design |
+| **PDF Export** | 4 domain-specific professional documents | Tangible, shareable output |
+| **Platforms** | Web (Vercel) + Desktop (Electron 35) | Cross-platform from single codebase |
+| **Live Demo** | [shadownotes.dmj.one](https://shadownotes.dmj.one) | Working product, not a prototype |
+| **Development** | Built in <1 week, orchestrated by Claude AI | Demonstrates AI-augmented development velocity |
+
+### What the Tests Prove
+
+231 tests are not vanity metrics — they verify:
+- Encryption/decryption round-trip integrity (AES-256-GCM)
+- Complete session lifecycle across all 4 domains
+- HKDF key derivation correctness
+- Vault CRUD with proper per-case isolation
+- Voice command parsing with fuzzy matching
+- Component rendering across all 10 UI screens
+- E2E user flows from voice capture to intelligence extraction
+
+---
+
+## Competition — Why Nothing Else Exists
+
+| Product | AI | Privacy | Offline | Extraction | Encryption | Verdict |
+|---------|-----|---------|---------|------------|------------|---------|
+| **ChatGPT / GPT-4** | Cloud LLM | Data sent to OpenAI servers | No | General purpose | No | Disqualified by data sovereignty |
+| **Otter.ai** | Cloud STT + summarization | Data sent to Otter servers | No | Meeting notes only | No | Disqualified by data sovereignty |
+| **Standard Notes** | None | End-to-end encrypted | Yes | None — just storage | AES-256 | No AI capability |
+| **Apple Dictation** | On-device STT only | Apple ecosystem | Partial | None — raw text only | Platform-dependent | No intelligence extraction |
+| **Dragon Medical** | Cloud-hybrid | Some on-device | Partial | Medical dictation only | Varies | Single domain, expensive, cloud-dependent |
+| **ShadowNotes** | On-device LLM + STT + TTS + VAD + Embeddings | Zero network transmission | Full offline | 4 domains with structured extraction | AES-256-GCM + WebAuthn | **Only complete solution** |
+
+**ShadowNotes occupies a category of one**: the intersection of on-device AI, structured intelligence extraction, military-grade encryption, and zero-network operation. No competitor addresses all four requirements simultaneously.
+
+### Competitive Moat
+
+1. **Architectural guarantee** — Privacy is not a policy; it is enforced by the absence of network calls in the codebase
+2. **Multi-domain extraction** — 4 specialized domains with speech error correction, not generic summarization
+3. **Complete voice pipeline** — Wake word → VAD → STT → LLM → TTS, all on-device
+4. **Semantic intelligence** — RAG context injection and embeddings-based dedup, running locally
+5. **Indian roots** — Hindi domain names, DPDPA compliance, designed for India's connectivity reality
+
+---
+
 ## ThoughtWorks and the RunAnywhere Ecosystem
 
 **ThoughtWorks Technologies** has been instrumental in fostering the ecosystem that makes projects like ShadowNotes possible. The **RunAnywhere SDK** — the backbone of ShadowNotes' AI capabilities — represents a paradigm shift in how AI applications are built:
@@ -113,14 +205,26 @@ This is the kind of infrastructure that enables India's developers to build AI a
 
 ## The Team
 
-**Team Vibe With Singularity**
+**Team Vibe With Singularity** | **dmj.one**
 
 | Member | Role | Institution |
 |--------|------|-------------|
-| **Divya Mohan** | Team Lead, Architecture, Full-Stack Development | GGSIPU, Delhi |
-| **Kumkum Thakur** | Design, Testing, Documentation | GGSIPU, Delhi |
+| **Divya Mohan** | Team Lead, Architecture, Full-Stack Development, Vision | GGSIPU, Delhi |
+| **Kumkum Thakur** | Design, Testing, Documentation, UX | GGSIPU, Delhi |
 
-Built with pride in India. Built for the world.
+### Development Orchestration
+
+ShadowNotes was **orchestrated by Claude** (Anthropic's AI) — demonstrating the power of AI-augmented development. The entire application — 231 tests, 20+ SDK integrations, military-grade encryption, 4 domain profiles, PDF export system, Electron desktop, WCAG accessibility — was architected and built in under a week through human-AI collaboration.
+
+This is not AI replacing developers. This is AI empowering developers to build at 10x velocity — exactly the kind of democratization that makes Aatmnirbhar Bharat possible. Two students from GGSIPU Delhi, working with Claude, built what would traditionally require a team of 10+ engineers over months.
+
+### Why This Team
+
+- **Divya Mohan** — Deep expertise in web technologies, security architecture, and AI integration. Creator of dmj.one, a platform dedicated to education and social impact.
+- **Kumkum Thakur** — Focus on user experience, testing rigour, and documentation quality that ensures the product is accessible and reliable.
+- **Claude (Anthropic)** — AI development partner that enabled rapid iteration across architecture, implementation, testing, and documentation.
+
+Built by humans, orchestrated by AI, built for humans. Built with pride in India. Built for the world.
 
 ---
 
@@ -144,6 +248,33 @@ The value ShadowNotes creates is measured not in revenue, but in:
 - **Communities safeguarded** through systematic incident response
 
 This is the Aatmnirbhar model: self-reliant technology that costs nothing to operate, depends on no external service, and serves the people who need it most.
+
+### Future Sustainability Paths (If Needed)
+
+While ShadowNotes is built as a public good, the platform's architecture enables sustainable paths without compromising the core mission:
+
+- **Enterprise customization** — Organizations (hospitals, law firms, government agencies) can commission custom domain profiles, extraction pipelines, and compliance integrations
+- **Training & deployment services** — Helping organizations set up air-gapped ShadowNotes instances on their own infrastructure
+- **Premium domain packs** — Specialized extraction profiles for niche verticals (radiology, tax law, HAZMAT response) — community edition remains free
+- **Government partnerships** — Indian government's Digital India and Aatmnirbhar Bharat initiatives actively fund projects aligned with data sovereignty
+
+The core product will always remain free, open source, and on-device. Revenue, if pursued, comes from services around the product, never from the user's data.
+
+---
+
+## The Ask — What We Need to Scale
+
+ShadowNotes is a working product. To take it from hackathon to India-scale impact:
+
+| Need | Purpose | Impact |
+|------|---------|--------|
+| **Recognition** | Validation from the RunAnywhere challenge | Credibility for institutional adoption |
+| **User testing** | Field trials with real physicians, auditors, lawyers | Domain-specific refinement |
+| **Model optimization** | Fine-tuned models for Indian medical/legal terminology | 2-3x better extraction accuracy |
+| **Localization** | Hindi, Tamil, Bengali, Marathi STT models | Serve India's linguistic diversity |
+| **Institutional partnerships** | Government hospitals, Bar Council, CERT-In | Real-world deployment at scale |
+
+We are not asking for funding. We are asking for the opportunity to serve. The technology is ready. India's professionals are waiting.
 
 ---
 

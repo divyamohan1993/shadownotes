@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo, type ReactNode } from 'react';
-import { getRecommendedPreset } from './runanywhere';
+import { getRecommendedPreset, LLM_MODELS, getSelectedLlmModelId, switchLlmModel } from './runanywhere';
 
 export interface PerfConfig {
   // LLM
@@ -157,6 +157,25 @@ export function DebugPanel({ autoLockMs, onAutoLockChange }: { autoLockMs?: numb
   const { config, setConfig, applyPreset, activePreset } = usePerfConfig();
   const [open, setOpen] = useState(false);
 
+  // LLM model selection (independent of perf presets)
+  const [selectedLlm, setSelectedLlm] = useState(getSelectedLlmModelId);
+  const [llmSwitching, setLlmSwitching] = useState(false);
+  const [llmSwitchProgress, setLlmSwitchProgress] = useState(0);
+
+  const handleLlmModelChange = useCallback(async (modelId: string) => {
+    if (modelId === selectedLlm || llmSwitching) return;
+    setLlmSwitching(true);
+    setLlmSwitchProgress(0);
+    setSelectedLlm(modelId);
+
+    const ok = await switchLlmModel(modelId, (_state, progress) => {
+      setLlmSwitchProgress(progress);
+    });
+
+    setLlmSwitching(false);
+    if (!ok) setSelectedLlm(getSelectedLlmModelId()); // revert on failure
+  }, [selectedLlm, llmSwitching]);
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -225,6 +244,26 @@ export function DebugPanel({ autoLockMs, onAutoLockChange }: { autoLockMs?: numb
               <input type="range" min={200} max={5000} step={100} value={config.extractionDebounceMs} onChange={(e) => update('extractionDebounceMs', +e.target.value)} />
               <span className="debug-value">{config.extractionDebounceMs}ms</span>
             </label>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '0.4rem 0' }} />
+            <label className="debug-row">
+              <span>Model</span>
+              <select
+                className="debug-select"
+                value={selectedLlm}
+                onChange={(e) => handleLlmModelChange(e.target.value)}
+                disabled={llmSwitching}
+              >
+                {LLM_MODELS.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.size})</option>
+                ))}
+              </select>
+            </label>
+            {llmSwitching && (
+              <div className="debug-row" style={{ justifyContent: 'center', opacity: 0.7, fontSize: '0.75rem' }}>
+                <span className="boot-spinner" style={{ marginRight: '0.4rem' }} />
+                <span>{llmSwitchProgress < 1 ? 'Downloading...' : 'Loading...'}</span>
+              </div>
+            )}
             {isElectron && (
               <>
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '0.4rem 0' }} />

@@ -10,6 +10,14 @@ function createInitPromise() {
 vi.mock('../../runanywhere', () => ({
   initSDK: vi.fn(() => createInitPromise()),
   getRecommendedPreset: vi.fn(() => 'medium'),
+  getSelectedLlmModelId: vi.fn(() => 'gemma-3-1b-it-q4_k_m'),
+  getLlmModelMeta: vi.fn(() => ({ id: 'gemma-3-1b-it-q4_k_m', name: 'Gemma 3 1B', size: '~810 MB', params: '1B' })),
+  LLM_MODELS: [
+    { id: 'smollm2-135m-instruct-q4_k_m', name: 'SmolLM2 135M', size: '~100 MB', params: '135M' },
+    { id: 'qwen2.5-0.5b-instruct-q4_k_m', name: 'Qwen2.5 0.5B', size: '~400 MB', params: '0.5B' },
+    { id: 'gemma-3-1b-it-q4_k_m', name: 'Gemma 3 1B', size: '~810 MB', params: '1B' },
+  ],
+  switchLlmModel: vi.fn(async () => true),
   ModelManager: {
     getModels: vi.fn(() => []),
   },

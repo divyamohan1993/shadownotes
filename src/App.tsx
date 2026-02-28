@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Component, type ErrorInfo, type ReactNode } from 'react';
-import { initSDK, ModelManager, ModelCategory, OPFSStorage, preloadONNXModels, refreshSDKFeatureStatus, type OnnxPreloadEvent, type OnnxModelState } from './runanywhere';
+import { initSDK, ModelManager, ModelCategory, OPFSStorage, preloadONNXModels, refreshSDKFeatureStatus, getSelectedLlmModelId, getLlmModelMeta, type OnnxPreloadEvent, type OnnxModelState } from './runanywhere';
 import { EventBus } from '@runanywhere/web';
 import { SessionInit } from './components/SessionInit';
 import { ActiveCapture } from './components/ActiveCapture';
@@ -124,7 +124,10 @@ function AppInner() {
 
   // Unified per-model boot status (LLM + ONNX all use the same shape)
   interface BootModelStatus { state: OnnxModelState; progress: number; name: string; size: string; cached: boolean; error?: string }
-  const [llmStatus, setLlmStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Gemma 3 1B Instruct', size: '~810 MB', cached: false });
+  const [llmStatus, setLlmStatus] = useState<BootModelStatus>(() => {
+    const meta = getLlmModelMeta(getSelectedLlmModelId());
+    return { state: 'pending', progress: 0, name: meta.name + ' Instruct', size: meta.size, cached: false };
+  });
   const [vadStatus, setVadStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Silero VAD', size: '2.3 MB', cached: false });
   const [sttStatus, setSttStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Whisper Tiny English', size: '103 MB', cached: false });
   const [ttsStatus, setTtsStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Piper English (Amy)', size: '63 MB', cached: false });
@@ -235,7 +238,8 @@ function AppInner() {
         // ── LLM ──────────────────────────────────────────────
         const langModels = ModelManager.getModels().filter((m) => m.modality === ModelCategory.Language);
         if (langModels.length > 0) {
-          const model = langModels[0];
+          const selectedId = getSelectedLlmModelId();
+          const model = langModels.find(m => m.id === selectedId) ?? langModels[0];
 
           // Check OPFS cache
           setLlmStatus(s => ({ ...s, state: 'checking' }));

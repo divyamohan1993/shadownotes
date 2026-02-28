@@ -336,82 +336,59 @@ Example:
     return { userPrompt, systemPrompt };
   }, [session.priorContext, embeddings]);
 
-  // Ollama extraction helper
-  const tryOllamaExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
-    const { userPrompt, systemPrompt } = await buildPrompt(text, domain);
-    try {
-      const { text: response } = await generateWithOllama(userPrompt, systemPrompt, perfConfig.ollamaModel);
-      return parseLLMResponse(response, domain.categories);
-    } catch (err) {
-      console.warn('[ShadowNotes] Ollama extraction failed:', err);
-      return [];
-    }
-  }, [perfConfig.ollamaModel, buildPrompt]);
-
-  // LLM extraction — streaming with Ollama cascade + tool extraction + embeddings dedup
+  // Single LLM generation — one call, unified parsing pipeline for all engines
   const tryLLMExtraction = useCallback(async (text: string, domain: DomainProfile): Promise<IntelligenceItem[]> => {
     if (!perfConfig.llmEnabled || llmBusyRef.current) return [];
-
-    // Ollama primary: if enabled and available, skip embedded LLM entirely
-    if (perfConfig.ollamaEnabled && ollamaAvailable) {
-      const ollamaItems = await tryOllamaExtraction(text, domain);
-      // Deduplicate via embeddings if available
-      if (ollamaItems.length > 0 && embeddings.isAvailable) {
-        try {
-          return await embeddings.deduplicate(ollamaItems);
-        } catch (err) {
-          console.warn('[ShadowNotes] Embeddings dedup failed for Ollama results:', err);
-        }
-      }
-      return ollamaItems;
-    }
 
     const myId = ++llmGenerationIdRef.current;
     llmBusyRef.current = true;
     try {
       const { userPrompt, systemPrompt } = await buildPrompt(text, domain);
 
-      // Use StructuredOutput to validate extraction format awareness
-      const hasStructuredSupport = typeof StructuredOutput?.extractJson === 'function';
-
-      // Streaming generation with advanced sampling parameters
-      const streamHandle = await TextGeneration.generateStream(userPrompt, {
-        systemPrompt,
-        maxTokens: perfConfig.maxTokens,
-        temperature: perfConfig.temperature,
-        topP: 0.9,
-        topK: 40,
-        stopSequences: ['\n\n\n', '---', 'End of extraction'],
-      });
-
-      // Accumulate tokens silently — no UI updates during generation.
-      // Only the final parsed intelligence items are displayed.
-      // Yield to the event loop every N tokens so the spinner and timer
-      // keep animating while the WASM LLM generates on the main thread.
+      // --- Single generation: pick one engine, get one response ---
       let accumulated = '';
-      let tokenCount = 0;
-      const timeoutId = setTimeout(() => streamHandle.cancel(), 60_000);
 
-      for await (const token of streamHandle.stream) {
-        if (llmGenerationIdRef.current !== myId) {
-          streamHandle.cancel();
-          break;
+      if (perfConfig.ollamaEnabled && ollamaAvailable) {
+        // Ollama engine (Electron desktop)
+        const { text: response } = await generateWithOllama(userPrompt, systemPrompt, perfConfig.ollamaModel);
+        accumulated = response;
+      } else {
+        // Embedded LLM engine (WASM, streaming)
+        const streamHandle = await TextGeneration.generateStream(userPrompt, {
+          systemPrompt,
+          maxTokens: perfConfig.maxTokens,
+          temperature: perfConfig.temperature,
+          topP: 0.9,
+          topK: 40,
+          stopSequences: ['\n\n\n', '---', 'End of extraction'],
+        });
+
+        let tokenCount = 0;
+        const timeoutId = setTimeout(() => streamHandle.cancel(), 60_000);
+
+        for await (const token of streamHandle.stream) {
+          if (llmGenerationIdRef.current !== myId) {
+            streamHandle.cancel();
+            break;
+          }
+          accumulated += token;
+          tokenCount++;
+          // Yield every 4 tokens so animations/timers stay responsive
+          if (tokenCount % 4 === 0) {
+            await yieldToMain();
+          }
         }
-        accumulated += token;
-        tokenCount++;
-        // Yield every 4 tokens so animations/timers stay responsive
-        if (tokenCount % 4 === 0) {
-          await yieldToMain();
-        }
+
+        clearTimeout(timeoutId);
       }
-
-      clearTimeout(timeoutId);
 
       if (llmGenerationIdRef.current !== myId) return [];
 
+      // --- Unified parsing: try all strategies on the single response ---
       let items: IntelligenceItem[] = [];
 
-      // Try StructuredOutput JSON extraction if response looks like JSON
+      // Strategy 1: StructuredOutput JSON extraction
+      const hasStructuredSupport = typeof StructuredOutput?.extractJson === 'function';
       if (hasStructuredSupport && accumulated.includes('{')) {
         try {
           const json = StructuredOutput.extractJson(accumulated);
@@ -435,7 +412,7 @@ Example:
         }
       }
 
-      // Fall back to line-based parsing if structured extraction yielded nothing
+      // Strategy 2: Line-based [Category] fact parsing
       if (items.length === 0) {
         items = parseLLMResponse(accumulated, domain.categories);
       }
@@ -451,18 +428,12 @@ Example:
 
       return items;
     } catch (err) {
-      if (err instanceof Error && err.message === 'LLM_TIMEOUT') {
-        console.warn('[ShadowNotes] Embedded LLM timed out — trying Ollama fallback');
-        if (ollamaAvailable) {
-          const ollamaItems = await tryOllamaExtraction(text, domain);
-          if (ollamaItems.length > 0) return ollamaItems;
-        }
-      }
+      console.warn('[ShadowNotes] LLM extraction failed:', err);
       return [];
     } finally {
       llmBusyRef.current = false;
     }
-  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, ollamaAvailable, tryOllamaExtraction, buildPrompt, embeddings]);
+  }, [perfConfig.llmEnabled, perfConfig.maxTokens, perfConfig.temperature, perfConfig.ollamaEnabled, perfConfig.ollamaModel, ollamaAvailable, buildPrompt, embeddings]);
 
   // Shared extraction: single LLM generation, multiple parsing strategies, regex fallback
   const extractWithFallback = useCallback(async (text: string): Promise<IntelligenceItem[]> => {

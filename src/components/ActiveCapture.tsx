@@ -95,8 +95,20 @@ try {
   AudioCaptureClass = class { async start() { throw new Error('AudioCapture unavailable'); } stop() {} get isCapturing() { return false; } } as any;
 }
 
+// SDK feature readiness tracking — provides reactive badge state
+let useSDKFeatures: () => { llm: boolean; stt: boolean; vad: boolean; tts: boolean; embeddings: boolean };
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  ({ useSDKFeatures } = require('../hooks/useSDKFeatures'));
+} catch {
+  useSDKFeatures = () => ({ llm: false, stt: false, vad: false, tts: false, embeddings: false });
+}
+
 const isElectron = !!(window as any).electronAPI?.isElectron || navigator.userAgent.includes('Electron');
 
+/** Yield to the browser event loop so animations/timers don't freeze. */
+const yieldToMain = (): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, 0));
 
 interface Props {
   session: SessionData;
@@ -199,6 +211,9 @@ export function ActiveCapture({ session, onAddTranscript, onUpdateLastTranscript
   const audioPipeline = useAudioPipeline();
   const tts = useTTS();
   const embeddings = useEmbeddings();
+
+  // Global SDK feature readiness — event-driven, set during boot
+  const sdkFeatures = useSDKFeatures();
 
   // Keep refs in sync with state
   useEffect(() => { captureStateRef.current = captureState; }, [captureState]);
@@ -377,7 +392,10 @@ Example:
 
       // Accumulate tokens silently — no UI updates during generation.
       // Only the final parsed intelligence items are displayed.
+      // Yield to the event loop every N tokens so the spinner and timer
+      // keep animating while the WASM LLM generates on the main thread.
       let accumulated = '';
+      let tokenCount = 0;
       const timeoutId = setTimeout(() => streamHandle.cancel(), 60_000);
 
       for await (const token of streamHandle.stream) {
@@ -386,6 +404,11 @@ Example:
           break;
         }
         accumulated += token;
+        tokenCount++;
+        // Yield every 4 tokens so animations/timers stay responsive
+        if (tokenCount % 4 === 0) {
+          await yieldToMain();
+        }
       }
 
       clearTimeout(timeoutId);
@@ -851,13 +874,13 @@ Example:
             <span>{llmStatusLabel}</span>
           </div>
 
-          {/* SDK feature status badges */}
+          {/* SDK feature status badges — uses global readiness tracker as fallback */}
           <div className="sdk-status" aria-label="SDK features status">
-            <span className={`sdk-badge ${llmState === 'ready' ? 'active' : ''}`} title="Language Model">LLM</span>
-            <span className={`sdk-badge ${audioPipeline.isAvailable ? 'active' : ''}`} title="Speech-to-Text">STT</span>
-            <span className={`sdk-badge ${audioPipeline.isAvailable ? 'active' : ''}`} title="Voice Activity Detection">VAD</span>
-            <span className={`sdk-badge ${tts.isAvailable ? 'active' : ''}`} title="Text-to-Speech">TTS</span>
-            <span className={`sdk-badge ${embeddings.isAvailable ? 'active' : ''}`} title="Embeddings">EMB</span>
+            <span className={`sdk-badge ${llmState === 'ready' || sdkFeatures.llm ? 'active' : ''}`} title="Language Model">LLM</span>
+            <span className={`sdk-badge ${audioPipeline.isAvailable || sdkFeatures.stt ? 'active' : ''}`} title="Speech-to-Text">STT</span>
+            <span className={`sdk-badge ${audioPipeline.isAvailable || sdkFeatures.vad ? 'active' : ''}`} title="Voice Activity Detection">VAD</span>
+            <span className={`sdk-badge ${tts.isAvailable || sdkFeatures.tts ? 'active' : ''}`} title="Text-to-Speech">TTS</span>
+            <span className={`sdk-badge ${embeddings.isAvailable || sdkFeatures.embeddings ? 'active' : ''}`} title="Embeddings">EMB</span>
           </div>
 
           {onShowVoiceHelp && (

@@ -282,6 +282,7 @@ export async function preloadONNXModels(
   try {
     onProgress?.('VAD', false);
     await downloadAndLoadModel(ModelCategory.Audio);
+    refreshSDKFeatureStatus();
     onProgress?.('VAD', true);
   } catch (err) {
     log.warning(`VAD preload skipped: ${err}`);
@@ -292,6 +293,7 @@ export async function preloadONNXModels(
   try {
     onProgress?.('STT', false);
     await downloadAndLoadModel(ModelCategory.SpeechRecognition);
+    refreshSDKFeatureStatus();
     onProgress?.('STT', true);
   } catch (err) {
     log.warning(`STT preload skipped: ${err}`);
@@ -302,12 +304,15 @@ export async function preloadONNXModels(
   try {
     onProgress?.('TTS', false);
     await downloadAndLoadModel(ModelCategory.SpeechSynthesis);
+    refreshSDKFeatureStatus();
     onProgress?.('TTS', true);
   } catch (err) {
     log.warning(`TTS preload skipped: ${err}`);
     onProgress?.('TTS', true);
   }
 
+  // Final refresh to capture all states
+  refreshSDKFeatureStatus();
   log.info('ONNX audio models preloaded (VAD + STT + TTS)');
 }
 
@@ -347,6 +352,72 @@ export type {
   VoicePipelineOptions,
   VoicePipelineTurnResult,
 } from '@runanywhere/web';
+
+// ── SDK Feature Readiness Tracking ──────────────────────────
+// Global readiness state that persists after boot. Hooks and UI components
+// can poll this synchronously to determine which SDK features are available,
+// without depending on delayed re-checks or ONNX property getters.
+
+export interface SDKFeatureStatus {
+  llm: boolean;
+  stt: boolean;
+  vad: boolean;
+  tts: boolean;
+  embeddings: boolean;
+}
+
+const _sdkFeatures: SDKFeatureStatus = {
+  llm: false,
+  stt: false,
+  vad: false,
+  tts: false,
+  embeddings: false,
+};
+
+type SDKFeatureListener = (status: SDKFeatureStatus) => void;
+const _featureListeners = new Set<SDKFeatureListener>();
+
+/** Get a snapshot of which SDK features are loaded and ready. */
+export function getSDKFeatureStatus(): SDKFeatureStatus {
+  return { ..._sdkFeatures };
+}
+
+/** Subscribe to SDK feature readiness changes. Returns unsubscribe function. */
+export function onSDKFeatureChange(listener: SDKFeatureListener): () => void {
+  _featureListeners.add(listener);
+  return () => { _featureListeners.delete(listener); };
+}
+
+/** Re-check all SDK feature readiness flags and notify listeners if changed. */
+export function refreshSDKFeatureStatus(): void {
+  let changed = false;
+  const check = (key: keyof SDKFeatureStatus, value: boolean) => {
+    if (_sdkFeatures[key] !== value) {
+      _sdkFeatures[key] = value;
+      changed = true;
+    }
+  };
+
+  // LLM: check if a language model is loaded
+  try {
+    check('llm', !!ModelManager.getLoadedModel(ModelCategory.Language));
+  } catch { check('llm', false); }
+
+  // ONNX features
+  try { check('vad', VAD.isInitialized); } catch { check('vad', false); }
+  try { check('stt', STT.isModelLoaded); } catch { check('stt', false); }
+  try { check('tts', TTS.isVoiceLoaded); } catch { check('tts', false); }
+
+  // Embeddings (LlamaCPP)
+  try { check('embeddings', Embeddings.isModelLoaded); } catch { check('embeddings', false); }
+
+  if (changed) {
+    const snapshot = { ..._sdkFeatures };
+    for (const fn of _featureListeners) {
+      try { fn(snapshot); } catch { /* listener error */ }
+    }
+  }
+}
 
 // ── Re-exports ──────────────────────────────────────────────
 // Every symbol that other files in the app may need, grouped by package.

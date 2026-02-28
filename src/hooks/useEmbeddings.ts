@@ -13,7 +13,7 @@
  * return the input unchanged.
  */
 
-import { useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Embeddings } from '@runanywhere/web-llamacpp';
 import type { IntelligenceItem } from '../types';
 
@@ -251,12 +251,27 @@ export function useEmbeddings(): EmbeddingsResult {
     [findSimilar],
   );
 
-  const isAvailable = useMemo(() => {
-    try {
-      return Embeddings.isModelLoaded;
-    } catch {
-      return false;
-    }
+  const [isAvailable, setIsAvailable] = useState(() => {
+    try { return Embeddings.isModelLoaded; } catch { return false; }
+  });
+
+  // Re-check availability — the embeddings model loads with the LLM and may
+  // not be ready when this hook first mounts.
+  useEffect(() => {
+    let mounted = true;
+    const check = () => {
+      try {
+        const ready = Embeddings.isModelLoaded;
+        if (mounted) setIsAvailable(ready);
+      } catch {
+        if (mounted) setIsAvailable(false);
+      }
+    };
+    check();
+    const t1 = setTimeout(check, 2_000);
+    const t2 = setTimeout(check, 5_000);
+    const t3 = setTimeout(check, 10_000);
+    return () => { mounted = false; clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
   return { isAvailable, deduplicate, findSimilar, buildRAGContext };

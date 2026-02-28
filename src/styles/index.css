@@ -389,7 +389,7 @@ input:focus, textarea:focus, select:focus {
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
   min-height: 160px;
-  max-height: 240px;
+  max-height: 360px;
   overflow-y: auto;
 }
 
@@ -403,6 +403,7 @@ input:focus, textarea:focus, select:focus {
   opacity: 0;
   animation: bootFadeIn 0.3s ease forwards;
   white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 .boot-line:last-child::after {
@@ -437,8 +438,105 @@ input:focus, textarea:focus, select:focus {
   flex-shrink: 0;
 }
 
+.boot-size {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.boot-progress-bar {
+  display: inline-flex;
+  width: 60px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin: 0 4px;
+}
+
+.boot-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent-amber);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.boot-pct {
+  color: var(--accent-amber);
+  font-weight: 600;
+  font-size: 0.65rem;
+  min-width: 2.5em;
+  flex-shrink: 0;
+}
+
+.boot-err-label {
+  color: var(--red-destroy-bright);
+  font-weight: 700;
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.boot-cached {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  background: rgba(39, 174, 96, 0.15);
+  color: var(--green-secure);
+  border: 1px solid rgba(39, 174, 96, 0.3);
+  flex-shrink: 0;
+}
+
+.boot-dim {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.boot-model-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  font-weight: 600;
+  opacity: 0;
+  animation: bootFadeIn 0.3s ease forwards;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.boot-line.error {
+  color: var(--red-destroy-bright);
+}
+
+.boot-line.error .boot-prefix {
+  color: var(--red-destroy-bright);
+}
+
+.boot-footer {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.boot-elapsed {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
 .boot-classification {
-  margin-top: 2rem;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 600;

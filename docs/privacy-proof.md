@@ -16,7 +16,7 @@ ShadowNotes uses a fully on-device AI architecture that keeps all sensitive proc
 | Speech-to-Text (fallback) | Web Speech API (browser-native) | — | Browser engine | May use browser's speech service |
 | Voice Activity Detection | On-device VAD (`VAD.onSpeechActivity()` / `processSamples()`) | `@runanywhere/web-onnx` | On-device | None after model download |
 | Audio Capture | 16kHz mono via AudioCapture | `@runanywhere/web-onnx` | On-device | None |
-| Intelligence Extraction (Layer 1) | RunAnywhere Qwen2.5 0.5B streaming (`TextGeneration.generateStream()`) | `@runanywhere/web-llamacpp` | On-device | None after model download |
+| Intelligence Extraction (Layer 1) | RunAnywhere Gemma 3 1B streaming (`TextGeneration.generateStream()`) | `@runanywhere/web-llamacpp` | On-device | None after model download |
 | Intelligence Extraction (Layer 2) | ToolCalling structured extraction (`ToolCalling.generateWithTools()`) | `@runanywhere/web-llamacpp` | On-device | None |
 | Intelligence Extraction (Layer 3) | Keyword regex matching | — | On-device | None |
 | Structured Validation | `StructuredOutput.extractJson()` | `@runanywhere/web-llamacpp` | On-device | None |
@@ -101,7 +101,7 @@ Screen render (DOM — in memory)
 
 ### Layer 1: Streaming LLM Extraction
 
-The Qwen2.5 0.5B Instruct Q4_K_M model runs in llama.cpp WASM inside the browser sandbox:
+The Gemma 3 1B Instruct Q4_K_M model runs in llama.cpp WASM inside the browser sandbox:
 
 - `TextGeneration.generateStream()` streams tokens to the UI in real-time
 - `StructuredOutput.extractJson()` validates the output as well-formed JSON
@@ -205,7 +205,7 @@ const [session, setSession] = useState<SessionData | null>(null);
 
 The RunAnywhere SDK uses the browser's Origin Private File System (OPFS) to cache downloaded model files. This is:
 
-- **Only for pre-trained model binaries** — Qwen2.5 0.5B GGUF weights (~400MB) and ONNX models (STT, TTS, VAD)
+- **Only for pre-trained model binaries** — Gemma 3 1B GGUF weights (~810MB) and ONNX models (STT, TTS, VAD)
 - **Not accessible** to other origins, websites, or applications
 - **Contains zero user data** — only pre-trained model weights
 - **Sandboxed** by the browser's security model

@@ -17,6 +17,7 @@ import {
   SpeechActivity,
 } from '@runanywhere/web-onnx';
 import { ModelManager, ModelCategory } from '@runanywhere/web';
+import { onSDKFeatureChange, refreshSDKFeatureStatus } from '../runanywhere';
 import type {
   AudioChunkCallback,
   AudioLevelCallback,
@@ -77,8 +78,9 @@ export function useAudioPipeline(): AudioPipelineResult {
 
   // ── Availability check ────────────────────────────────────
   // We consider the pipeline "available" when the ONNX backend is registered
-  // and both an STT model and VAD are loaded. Re-checks after a delay in
-  // case models are still being loaded during the boot sequence.
+  // and both an STT model and VAD are loaded. Subscribes to SDK feature
+  // change events so we react immediately when models finish loading
+  // (rather than relying only on fixed-delay re-checks).
   useEffect(() => {
     mountedRef.current = true;
 
@@ -95,12 +97,20 @@ export function useAudioPipeline(): AudioPipelineResult {
 
     check();
 
-    // Re-check after short delays — boot preload may still be in progress
+    // Subscribe to SDK feature changes — fires when any model finishes loading
+    const unsub = onSDKFeatureChange((status) => {
+      if (mountedRef.current) {
+        setIsAvailable(status.stt && status.vad);
+      }
+    });
+
+    // Also re-check after short delays as safety net
     const t1 = setTimeout(check, 2_000);
     const t2 = setTimeout(check, 5_000);
 
     return () => {
       mountedRef.current = false;
+      unsub();
       clearTimeout(t1);
       clearTimeout(t2);
     };

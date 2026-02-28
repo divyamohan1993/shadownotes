@@ -7,7 +7,7 @@
 | **Node.js** | Version 18 or higher ([download](https://nodejs.org)) |
 | **Browser** | Chrome 96+ or Edge 96+ (required for WebAssembly SIMD + SharedArrayBuffer) |
 | **Microphone** | Any working microphone for voice capture |
-| **Disk Space** | ~400MB for LLM model download (one-time, cached in OPFS) |
+| **Disk Space** | ~810MB for LLM model download (one-time, cached in OPFS) |
 | **RAM** | 2GB+ free (for WASM model inference) |
 | **ONNX Models** *(optional)* | On-device STT, VAD, and TTS models (~50MB total, auto-downloaded). Enables voice activity detection, on-device speech-to-text, and spoken feedback. Falls back gracefully to Web Speech API if unavailable. |
 
@@ -83,7 +83,7 @@ When entering a passphrase, a real-time **strength indicator** rates it as WEAK,
 
 ### Step 3: Begin Session
 
-Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (Qwen2.5 0.5B Instruct, ~400MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
+Select a domain and click **"BEGIN CAPTURE SESSION"**. The LLM model (Gemma 3 1B Instruct, ~810MB) begins downloading in the background. You can start capturing immediately — keyword-based extraction works instantly while the LLM loads.
 
 A progress bar shows download status. The model is cached in your browser's private filesystem (OPFS), so subsequent sessions skip the download.
 
@@ -200,12 +200,12 @@ Return to the session init screen and re-download models. This can happen if OPF
 
 ### Models fail to download
 - Check internet connection (only needed for first download)
-- Ensure sufficient disk space (~400MB)
+- Ensure sufficient disk space (~810MB)
 - Try clearing browser site data and re-downloading
 
 ### Slow transcription or extraction
 - Close other browser tabs to free memory
-- Qwen2.5 0.5B Instruct runs on CPU via WASM — larger transcripts take longer to analyze
+- Gemma 3 1B Instruct runs on CPU via WASM — larger transcripts take longer to analyze
 - If your device has WebGPU support, the SDK will auto-detect and use GPU acceleration
 - Ensure your device has 2GB+ free RAM
 

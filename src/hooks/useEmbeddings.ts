@@ -15,6 +15,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Embeddings } from '@runanywhere/web-llamacpp';
+import { onSDKFeatureChange } from '../runanywhere';
 import type { IntelligenceItem } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -256,7 +257,8 @@ export function useEmbeddings(): EmbeddingsResult {
   });
 
   // Re-check availability — the embeddings model loads with the LLM and may
-  // not be ready when this hook first mounts.
+  // not be ready when this hook first mounts. Subscribe to SDK feature changes
+  // so we react immediately when the embeddings model becomes available.
   useEffect(() => {
     let mounted = true;
     const check = () => {
@@ -268,10 +270,12 @@ export function useEmbeddings(): EmbeddingsResult {
       }
     };
     check();
+    const unsub = onSDKFeatureChange((status) => {
+      if (mounted) setIsAvailable(status.embeddings);
+    });
     const t1 = setTimeout(check, 2_000);
     const t2 = setTimeout(check, 5_000);
-    const t3 = setTimeout(check, 10_000);
-    return () => { mounted = false; clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    return () => { mounted = false; unsub(); clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
   return { isAvailable, deduplicate, findSimilar, buildRAGContext };

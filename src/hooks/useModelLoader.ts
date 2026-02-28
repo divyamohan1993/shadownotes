@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { ModelManager, ModelCategory, EventBus, OPFSStorage } from '@runanywhere/web';
+import { getSelectedLlmModelId } from '../runanywhere';
 
 export type LoaderState = 'idle' | 'downloading' | 'loading' | 'ready' | 'error';
 
@@ -35,7 +36,9 @@ export function useModelLoader(category: ModelCategory, coexist = false): ModelL
         return false;
       }
 
-      const model = models[0];
+      const model = category === ModelCategory.Language
+        ? (models.find(m => m.id === getSelectedLlmModelId()) ?? models[0])
+        : models[0];
 
       // Check OPFS directly — model.status may lag behind actual cache state
       const opfs = new OPFSStorage();

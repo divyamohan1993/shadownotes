@@ -286,7 +286,7 @@
           <div class="step-number">01</div>
           <div class="step-body">
             <div class="step-title">Access the Application</div>
-            <div class="step-desc">Navigate to <a href="https://shadownotes.dmj.one" target="_blank" rel="noopener">shadownotes.dmj.one</a>. The boot sequence initializes the secure environment, registers the LLM model backend, and downloads the on-device AI engine (~400 MB, one-time).</div>
+            <div class="step-desc">Navigate to <a href="https://shadownotes.dmj.one" target="_blank" rel="noopener">shadownotes.dmj.one</a>. The boot sequence initializes the secure environment, registers the LLM model backend, and downloads the on-device AI engine (~810 MB, one-time).</div>
             <div class="step-hint">First load takes 1-3 minutes depending on connection. After that, the app works fully offline.</div>
           </div>
         </div>
@@ -407,7 +407,7 @@
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
-          <span class="test-desc"><strong>AI model download:</strong> Wait for the boot screen to show the green checkmarks. The ~400 MB model (Qwen2.5 0.5B Instruct) downloads once and is cached in the browser's private filesystem (OPFS).</span>
+          <span class="test-desc"><strong>AI model download:</strong> Wait for the boot screen to show the green checkmarks. The ~810 MB model (Gemma 3 1B Instruct) downloads once and is cached in the browser's private filesystem (OPFS).</span>
         </div>
         <div class="test-item">
           <span class="test-check">&#9744;</span>
@@ -445,7 +445,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#x1F9E0;</div>
           <div class="feature-title">Streaming AI Extraction</div>
-          <div class="feature-desc">Qwen2.5 0.5B Instruct LLM streams tokens in real-time via <code>TextGeneration.generateStream()</code>. <code>StructuredOutput.extractJson()</code> validates extraction format. Advanced sampling with <code>topK</code>, <code>topP</code>, <code>temperature</code>, and <code>stopSequences</code>.</div>
+          <div class="feature-desc">Gemma 3 1B Instruct LLM streams tokens in real-time via <code>TextGeneration.generateStream()</code>. <code>StructuredOutput.extractJson()</code> validates extraction format. Advanced sampling with <code>topK</code>, <code>topP</code>, <code>temperature</code>, and <code>stopSequences</code>.</div>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#x1F4DD;</div>
@@ -518,7 +518,7 @@
           <tr><td>AI SDK (core)</td><td>@runanywhere/web</td><td>ModelManager, EventBus, OPFSStorage</td></tr>
           <tr><td>AI SDK (LLM)</td><td>@runanywhere/web-llamacpp</td><td>Streaming LLM, StructuredOutput, ToolCalling, Embeddings</td></tr>
           <tr><td>AI SDK (Audio)</td><td>@runanywhere/web-onnx</td><td>STT, TTS, VAD, AudioCapture, AudioPlayback</td></tr>
-          <tr><td>LLM Model</td><td>Qwen2.5 0.5B Instruct Q4_K_M</td><td>Streaming extraction via llama.cpp WASM</td></tr>
+          <tr><td>LLM Model</td><td>Gemma 3 1B Instruct Q4_K_M</td><td>Streaming extraction via llama.cpp WASM</td></tr>
           <tr><td>STT</td><td>Web Speech API</td><td>Browser-native speech-to-text transcription</td></tr>
           <tr><td>Encryption</td><td>AES-256-GCM + HKDF + PBKDF2</td><td>Per-case encryption for vault storage</td></tr>
           <tr><td>Auth</td><td>WebAuthn + PRF extension</td><td>Biometric authentication + key derivation</td></tr>

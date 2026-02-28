@@ -10,6 +10,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TTS, AudioPlayback } from '@runanywhere/web-onnx';
 import { ModelManager, ModelCategory } from '@runanywhere/web';
+import { onSDKFeatureChange } from '../runanywhere';
 
 // ── Public Interface ────────────────────────────────────────
 
@@ -47,12 +48,18 @@ export function useTTS(): TTSResult {
 
     check();
 
-    // Re-check after a delay — models may still be loading during boot
+    // Subscribe to SDK feature changes — fires when TTS finishes loading
+    const unsub = onSDKFeatureChange((status) => {
+      if (mountedRef.current) setIsAvailable(status.tts);
+    });
+
+    // Also re-check after short delays as safety net
     const t1 = setTimeout(check, 2_000);
     const t2 = setTimeout(check, 5_000);
 
     return () => {
       mountedRef.current = false;
+      unsub();
       clearTimeout(t1);
       clearTimeout(t2);
 

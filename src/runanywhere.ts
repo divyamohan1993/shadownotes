@@ -55,7 +55,27 @@ import {
 
 // ── Model Registry ──────────────────────────────────────────
 const MODELS: CompactModelDef[] = [
-  // LLM — primary intelligence extraction engine
+  // LLM — primary intelligence extraction engine (Gemma 3 1B Instruct)
+  {
+    id: 'gemma-3-1b-it-q4_k_m',
+    name: 'Gemma 3 1B Instruct Q4_K_M',
+    repo: 'bartowski/google_gemma-3-1b-it-GGUF',
+    files: ['google_gemma-3-1b-it-Q4_K_M.gguf'],
+    framework: LLMFramework.LlamaCpp,
+    modality: ModelCategory.Language,
+    memoryRequirement: 900_000_000,
+  },
+  // LLM — lightweight extraction engine (SmolLM2 135M Instruct)
+  {
+    id: 'smollm2-135m-instruct-q4_k_m',
+    name: 'SmolLM2 135M Instruct Q4_K_M',
+    repo: 'bartowski/SmolLM2-135M-Instruct-GGUF',
+    files: ['SmolLM2-135M-Instruct-Q4_K_M.gguf'],
+    framework: LLMFramework.LlamaCpp,
+    modality: ModelCategory.Language,
+    memoryRequirement: 150_000_000,
+  },
+  // LLM — balanced extraction engine (Qwen2.5 0.5B Instruct)
   {
     id: 'qwen2.5-0.5b-instruct-q4_k_m',
     name: 'Qwen2.5 0.5B Instruct Q4_K_M',
@@ -63,7 +83,7 @@ const MODELS: CompactModelDef[] = [
     files: ['Qwen2.5-0.5B-Instruct-Q4_K_M.gguf'],
     framework: LLMFramework.LlamaCpp,
     modality: ModelCategory.Language,
-    memoryRequirement: 400_000_000,
+    memoryRequirement: 450_000_000,
   },
   // VAD — Silero Voice Activity Detection (~2.3 MB)
   {
@@ -96,6 +116,80 @@ const MODELS: CompactModelDef[] = [
     memoryRequirement: 70_000_000,
   },
 ];
+
+// ── LLM Model Selection ─────────────────────────────────────
+
+/** UI metadata for the available LLM models (ordered smallest → largest). */
+export const LLM_MODELS: { id: string; name: string; size: string; params: string }[] = [
+  { id: 'smollm2-135m-instruct-q4_k_m', name: 'SmolLM2 135M', size: '~100 MB', params: '135M' },
+  { id: 'qwen2.5-0.5b-instruct-q4_k_m', name: 'Qwen2.5 0.5B', size: '~400 MB', params: '0.5B' },
+  { id: 'gemma-3-1b-it-q4_k_m', name: 'Gemma 3 1B', size: '~810 MB', params: '1B' },
+];
+
+const LLM_STORAGE_KEY = 'shadownotes-selected-llm';
+const DEFAULT_LLM_ID = 'gemma-3-1b-it-q4_k_m';
+
+/** Get the user's selected LLM model ID from localStorage. */
+export function getSelectedLlmModelId(): string {
+  try {
+    const id = localStorage.getItem(LLM_STORAGE_KEY);
+    if (id && LLM_MODELS.some(m => m.id === id)) return id;
+  } catch { /* ignore */ }
+  return DEFAULT_LLM_ID;
+}
+
+/** Persist the user's LLM model selection. */
+export function setSelectedLlmModelId(id: string): void {
+  try { localStorage.setItem(LLM_STORAGE_KEY, id); } catch { /* ignore */ }
+}
+
+/** Get LLM model UI metadata by ID. Falls back to the largest (Gemma). */
+export function getLlmModelMeta(id: string) {
+  return LLM_MODELS.find(m => m.id === id) ?? LLM_MODELS[LLM_MODELS.length - 1];
+}
+
+/**
+ * Download + load a different LLM model at runtime (hot-swap).
+ * Returns true on success. The previous Language model is replaced in-place.
+ */
+export async function switchLlmModel(
+  modelId: string,
+  onProgress?: (state: 'downloading' | 'loading' | 'done' | 'error', progress: number) => void,
+): Promise<boolean> {
+  const models = ModelManager.getModels().filter(m => m.modality === ModelCategory.Language);
+  const model = models.find(m => m.id === modelId);
+  if (!model) { onProgress?.('error', 0); return false; }
+
+  try {
+    const opfs = new OPFSStorage();
+    const opfsOk = await opfs.initialize();
+    const cached = opfsOk && await opfs.hasModel(model.id);
+
+    if (!cached && model.status !== 'downloaded' && model.status !== 'loaded') {
+      onProgress?.('downloading', 0);
+      const unsub = EventBus.shared.on('model.downloadProgress', (evt: { modelId?: string; progress?: number }) => {
+        if (evt.modelId === model.id) onProgress?.('downloading', evt.progress ?? 0);
+      });
+      try {
+        await ModelManager.downloadModel(model.id);
+      } finally {
+        unsub();
+      }
+    }
+
+    onProgress?.('loading', 1);
+    await ModelManager.loadModel(model.id, { coexist: true });
+    refreshSDKFeatureStatus();
+
+    setSelectedLlmModelId(modelId);
+    onProgress?.('done', 1);
+    return true;
+  } catch (err) {
+    log.warning(`Failed to switch LLM to ${modelId}: ${err}`);
+    onProgress?.('error', 0);
+    return false;
+  }
+}
 
 // ── SDK Logger Instance ─────────────────────────────────────
 const log = new SDKLogger('ShadowNotes');
@@ -233,30 +327,6 @@ export async function initSDK(): Promise<void> {
 
 // ── ONNX Model Preloading ────────────────────────────────────
 
-/**
- * Download and fully initialise a single ONNX model by category.
- *
- * ModelManager.ensureLoaded() handles the full lifecycle:
- *   download → OPFS → sherpa-onnx FS → pluggable loader → module init.
- *
- * If ensureLoaded returns a model but the module readiness flag is still
- * false, we fall back to a manual download + load via ModelManager to
- * ensure the loader pipeline runs completely.
- */
-async function downloadAndLoadModel(category: ModelCategory, coexist = true): Promise<void> {
-  // Primary path: ensureLoaded handles download + OPFS + sherpa-onnx FS + module init
-  const model = await ModelManager.ensureLoaded(category, { coexist });
-
-  // Verify the high-level module actually reports as ready.
-  // If ensureLoaded succeeded at the ModelManager level but the module
-  // state wasn't set (e.g. loader didn't run), force a load.
-  const ready = isModuleReady(category);
-  if (!ready && model) {
-    log.warning(`${category} module not ready after ensureLoaded — retrying via loadModel`);
-    await ModelManager.loadModel(model.id, { coexist });
-  }
-}
-
 /** Check whether the high-level ONNX module for a given category is ready. */
 function isModuleReady(category: ModelCategory): boolean {
   try {
@@ -267,48 +337,148 @@ function isModuleReady(category: ModelCategory): boolean {
   return false;
 }
 
+/** Yield to the browser event loop so UI can repaint between heavy ops. */
+const yieldToMain = (): Promise<void> => new Promise(r => setTimeout(r, 0));
+
+/** State reported per-model during preload. */
+export type OnnxModelState = 'pending' | 'checking' | 'cached' | 'downloading' | 'loading' | 'done' | 'error';
+
+/** Progress event emitted for each ONNX model during preload. */
+export interface OnnxPreloadEvent {
+  model: 'VAD' | 'STT' | 'TTS';
+  modelName: string;
+  modelSize: string;
+  state: OnnxModelState;
+  progress: number; // 0-1 for download
+  cached: boolean;  // true if loaded from OPFS cache (not re-downloaded)
+  error?: string;
+}
+
+/** Model metadata used during preload display. */
+const ONNX_MODEL_META: Record<string, { label: 'VAD' | 'STT' | 'TTS'; name: string; size: string; category: ModelCategory }> = {
+  'silero-vad': { label: 'VAD', name: 'Silero Voice Activity Detection', size: '2.3 MB', category: ModelCategory.Audio },
+  'whisper-tiny-en': { label: 'STT', name: 'Whisper Tiny English', size: '103 MB', category: ModelCategory.SpeechRecognition },
+  'piper-tts-en-amy-low': { label: 'TTS', name: 'Piper English (Amy)', size: '63 MB', category: ModelCategory.SpeechSynthesis },
+};
+
+/**
+ * Download and load a single ONNX model with granular progress reporting.
+ *
+ * Uses explicit download + load (mirroring LLM boot pattern) instead of
+ * ensureLoaded, so we can subscribe to EventBus download progress events.
+ *
+ * Yields to the main thread between heavy operations so the boot screen
+ * can repaint continuously (spinner keeps spinning, progress bars update).
+ */
+async function downloadAndLoadOnnxModel(
+  category: ModelCategory,
+  onProgress?: (event: OnnxPreloadEvent) => void,
+): Promise<void> {
+  const models = ModelManager.getModels().filter(m => m.modality === category);
+  if (models.length === 0) {
+    log.warning(`No ${category} model registered — skipping`);
+    return;
+  }
+
+  const model = models[0];
+  const meta = ONNX_MODEL_META[model.id] ?? { label: 'ONNX' as const, name: model.name, size: '?', category };
+  let fromCache = false;
+  const emit = (state: OnnxModelState, progress: number, error?: string) => {
+    onProgress?.({ model: meta.label, modelName: meta.name, modelSize: meta.size, state, progress, cached: fromCache, error });
+  };
+
+  // ── 1. Check OPFS cache ──────────────────────────────────
+  emit('checking', 0);
+  await yieldToMain();
+
+  const opfs = new OPFSStorage();
+  const opfsOk = await opfs.initialize();
+  const inCache = opfsOk && await opfs.hasModel(model.id);
+  await yieldToMain();
+
+  // ── 2. Download or confirm cache ─────────────────────────
+  if (inCache || model.status === 'downloaded' || model.status === 'loaded') {
+    fromCache = true;
+    emit('cached', 1);
+    log.info(`${meta.label} found in OPFS cache`);
+    await yieldToMain();
+  } else {
+    // Download with progress tracking via EventBus
+    emit('downloading', 0);
+    await yieldToMain();
+    const unsub = EventBus.shared.on('model.downloadProgress', (evt: { modelId?: string; progress?: number }) => {
+      if (evt.modelId === model.id) {
+        emit('downloading', evt.progress ?? 0);
+      }
+    });
+    try {
+      await ModelManager.downloadModel(model.id);
+    } finally {
+      unsub();
+    }
+    await yieldToMain();
+  }
+
+  // ── 3. Load into RAM / inference engine ──────────────────
+  emit('loading', 1);
+  await yieldToMain();
+
+  if (!ModelManager.getLoadedModel(category)) {
+    await ModelManager.loadModel(model.id, { coexist: true });
+    await yieldToMain();
+  }
+
+  // Verify the high-level module actually reports as ready.
+  // If loadModel succeeded at the ModelManager level but the module
+  // state wasn't set (e.g. loader didn't run), force a reload.
+  if (!isModuleReady(category)) {
+    log.warning(`${meta.label} module not ready after loadModel — retrying`);
+    await ModelManager.loadModel(model.id, { coexist: true });
+    await yieldToMain();
+  }
+
+  refreshSDKFeatureStatus();
+
+  if (isModuleReady(category)) {
+    emit('done', 1);
+    log.info(`${meta.label} (${meta.name}) loaded successfully${fromCache ? ' [from cache]' : ''}`);
+  } else {
+    emit('error', 1, `${meta.label} module not ready after load`);
+    log.warning(`${meta.label} module not ready after all attempts`);
+  }
+}
+
 /**
  * Preload ONNX audio models (VAD, STT, TTS) so they are ready for
  * first use without an on-demand download pause.
  *
- * Uses ModelManager.ensureLoaded() for the download/OPFS lifecycle, with a
- * fallback to ModelManager.loadModel() if the module readiness flag is not
- * set after the initial load attempt.
+ * Reports granular per-model download + load progress via callback.
  */
 export async function preloadONNXModels(
-  onProgress?: (step: string, done: boolean) => void,
+  onProgress?: (event: OnnxPreloadEvent) => void,
 ): Promise<void> {
   // VAD: Silero Voice Activity Detection (~2.3 MB)
   try {
-    onProgress?.('VAD', false);
-    await downloadAndLoadModel(ModelCategory.Audio);
-    refreshSDKFeatureStatus();
-    onProgress?.('VAD', true);
+    await downloadAndLoadOnnxModel(ModelCategory.Audio, onProgress);
   } catch (err) {
-    log.warning(`VAD preload skipped: ${err}`);
-    onProgress?.('VAD', true);
+    log.warning(`VAD preload failed: ${err}`);
+    onProgress?.({ model: 'VAD', modelName: 'Silero VAD', modelSize: '2.3 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // STT: Whisper Tiny English (~103 MB on first run, cached after)
   try {
-    onProgress?.('STT', false);
-    await downloadAndLoadModel(ModelCategory.SpeechRecognition);
-    refreshSDKFeatureStatus();
-    onProgress?.('STT', true);
+    await downloadAndLoadOnnxModel(ModelCategory.SpeechRecognition, onProgress);
   } catch (err) {
-    log.warning(`STT preload skipped: ${err}`);
-    onProgress?.('STT', true);
+    log.warning(`STT preload failed: ${err}`);
+    onProgress?.({ model: 'STT', modelName: 'Whisper Tiny English', modelSize: '103 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // TTS: Piper English voice (~63 MB on first run, cached after)
   try {
-    onProgress?.('TTS', false);
-    await downloadAndLoadModel(ModelCategory.SpeechSynthesis);
-    refreshSDKFeatureStatus();
-    onProgress?.('TTS', true);
+    await downloadAndLoadOnnxModel(ModelCategory.SpeechSynthesis, onProgress);
   } catch (err) {
-    log.warning(`TTS preload skipped: ${err}`);
-    onProgress?.('TTS', true);
+    log.warning(`TTS preload failed: ${err}`);
+    onProgress?.({ model: 'TTS', modelName: 'Piper English (Amy)', modelSize: '63 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // Final refresh to capture all states

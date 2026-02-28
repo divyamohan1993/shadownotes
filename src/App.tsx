@@ -130,7 +130,7 @@ function AppInner() {
   });
   const [vadStatus, setVadStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Silero VAD', size: '2.3 MB', cached: false });
   const [sttStatus, setSttStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Whisper Tiny English', size: '103 MB', cached: false });
-  const [ttsStatus, setTtsStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Piper English (Amy)', size: '63 MB', cached: false });
+  const [ttsStatus, setTtsStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Piper English (Lessac)', size: '64 MB', cached: false });
 
   // Navigation state
   const [screen, setScreen] = useState<AppScreen>('unlock');

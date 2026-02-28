@@ -233,30 +233,6 @@ export async function initSDK(): Promise<void> {
 
 // ── ONNX Model Preloading ────────────────────────────────────
 
-/**
- * Download and fully initialise a single ONNX model by category.
- *
- * ModelManager.ensureLoaded() handles the full lifecycle:
- *   download → OPFS → sherpa-onnx FS → pluggable loader → module init.
- *
- * If ensureLoaded returns a model but the module readiness flag is still
- * false, we fall back to a manual download + load via ModelManager to
- * ensure the loader pipeline runs completely.
- */
-async function downloadAndLoadModel(category: ModelCategory, coexist = true): Promise<void> {
-  // Primary path: ensureLoaded handles download + OPFS + sherpa-onnx FS + module init
-  const model = await ModelManager.ensureLoaded(category, { coexist });
-
-  // Verify the high-level module actually reports as ready.
-  // If ensureLoaded succeeded at the ModelManager level but the module
-  // state wasn't set (e.g. loader didn't run), force a load.
-  const ready = isModuleReady(category);
-  if (!ready && model) {
-    log.warning(`${category} module not ready after ensureLoaded — retrying via loadModel`);
-    await ModelManager.loadModel(model.id, { coexist });
-  }
-}
-
 /** Check whether the high-level ONNX module for a given category is ready. */
 function isModuleReady(category: ModelCategory): boolean {
   try {
@@ -267,48 +243,125 @@ function isModuleReady(category: ModelCategory): boolean {
   return false;
 }
 
+/** State reported per-model during preload. */
+export type OnnxModelState = 'pending' | 'checking' | 'downloading' | 'loading' | 'done' | 'error';
+
+/** Progress event emitted for each ONNX model during preload. */
+export interface OnnxPreloadEvent {
+  model: 'VAD' | 'STT' | 'TTS';
+  modelName: string;
+  modelSize: string;
+  state: OnnxModelState;
+  progress: number; // 0-1 for download
+  error?: string;
+}
+
+/** Model metadata used during preload display. */
+const ONNX_MODEL_META: Record<string, { label: 'VAD' | 'STT' | 'TTS'; name: string; size: string; category: ModelCategory }> = {
+  'silero-vad': { label: 'VAD', name: 'Silero Voice Activity Detection', size: '2.3 MB', category: ModelCategory.Audio },
+  'whisper-tiny-en': { label: 'STT', name: 'Whisper Tiny English', size: '103 MB', category: ModelCategory.SpeechRecognition },
+  'piper-tts-en-amy-low': { label: 'TTS', name: 'Piper English (Amy)', size: '63 MB', category: ModelCategory.SpeechSynthesis },
+};
+
+/**
+ * Download and load a single ONNX model with granular progress reporting.
+ * Uses explicit download + load (mirroring LLM boot pattern) instead of
+ * ensureLoaded, so we can subscribe to EventBus download progress events.
+ */
+async function downloadAndLoadOnnxModel(
+  category: ModelCategory,
+  onProgress?: (event: OnnxPreloadEvent) => void,
+): Promise<void> {
+  const models = ModelManager.getModels().filter(m => m.modality === category);
+  if (models.length === 0) {
+    log.warning(`No ${category} model registered — skipping`);
+    return;
+  }
+
+  const model = models[0];
+  const meta = ONNX_MODEL_META[model.id] ?? { label: 'ONNX' as const, name: model.name, size: '?', category };
+  const emit = (state: OnnxModelState, progress: number, error?: string) => {
+    onProgress?.({ model: meta.label, modelName: meta.name, modelSize: meta.size, state, progress, error });
+  };
+
+  emit('checking', 0);
+
+  // Check OPFS cache directly — model.status may lag behind actual cache state
+  const opfs = new OPFSStorage();
+  const opfsOk = await opfs.initialize();
+  const cached = opfsOk && await opfs.hasModel(model.id);
+
+  if (!cached && model.status !== 'downloaded' && model.status !== 'loaded') {
+    // Download with progress tracking via EventBus
+    emit('downloading', 0);
+    const unsub = EventBus.shared.on('model.downloadProgress', (evt: { modelId?: string; progress?: number }) => {
+      if (evt.modelId === model.id) {
+        emit('downloading', evt.progress ?? 0);
+      }
+    });
+    try {
+      await ModelManager.downloadModel(model.id);
+    } finally {
+      unsub();
+    }
+  }
+
+  // Load into inference engine
+  emit('loading', 1);
+  if (!ModelManager.getLoadedModel(category)) {
+    await ModelManager.loadModel(model.id, { coexist: true });
+  }
+
+  // Verify the high-level module actually reports as ready.
+  // If loadModel succeeded at the ModelManager level but the module
+  // state wasn't set (e.g. loader didn't run), force a reload.
+  if (!isModuleReady(category)) {
+    log.warning(`${meta.label} module not ready after loadModel — retrying`);
+    await ModelManager.loadModel(model.id, { coexist: true });
+  }
+
+  refreshSDKFeatureStatus();
+
+  if (isModuleReady(category)) {
+    emit('done', 1);
+    log.info(`${meta.label} (${meta.name}) loaded successfully`);
+  } else {
+    emit('error', 1, `${meta.label} module not ready after load`);
+    log.warning(`${meta.label} module not ready after all attempts`);
+  }
+}
+
 /**
  * Preload ONNX audio models (VAD, STT, TTS) so they are ready for
  * first use without an on-demand download pause.
  *
- * Uses ModelManager.ensureLoaded() for the download/OPFS lifecycle, with a
- * fallback to ModelManager.loadModel() if the module readiness flag is not
- * set after the initial load attempt.
+ * Reports granular per-model download + load progress via callback.
  */
 export async function preloadONNXModels(
-  onProgress?: (step: string, done: boolean) => void,
+  onProgress?: (event: OnnxPreloadEvent) => void,
 ): Promise<void> {
   // VAD: Silero Voice Activity Detection (~2.3 MB)
   try {
-    onProgress?.('VAD', false);
-    await downloadAndLoadModel(ModelCategory.Audio);
-    refreshSDKFeatureStatus();
-    onProgress?.('VAD', true);
+    await downloadAndLoadOnnxModel(ModelCategory.Audio, onProgress);
   } catch (err) {
-    log.warning(`VAD preload skipped: ${err}`);
-    onProgress?.('VAD', true);
+    log.warning(`VAD preload failed: ${err}`);
+    onProgress?.({ model: 'VAD', modelName: 'Silero VAD', modelSize: '2.3 MB', state: 'error', progress: 0, error: String(err) });
   }
 
   // STT: Whisper Tiny English (~103 MB on first run, cached after)
   try {
-    onProgress?.('STT', false);
-    await downloadAndLoadModel(ModelCategory.SpeechRecognition);
-    refreshSDKFeatureStatus();
-    onProgress?.('STT', true);
+    await downloadAndLoadOnnxModel(ModelCategory.SpeechRecognition, onProgress);
   } catch (err) {
-    log.warning(`STT preload skipped: ${err}`);
-    onProgress?.('STT', true);
+    log.warning(`STT preload failed: ${err}`);
+    onProgress?.({ model: 'STT', modelName: 'Whisper Tiny English', modelSize: '103 MB', state: 'error', progress: 0, error: String(err) });
   }
 
   // TTS: Piper English voice (~63 MB on first run, cached after)
   try {
-    onProgress?.('TTS', false);
-    await downloadAndLoadModel(ModelCategory.SpeechSynthesis);
-    refreshSDKFeatureStatus();
-    onProgress?.('TTS', true);
+    await downloadAndLoadOnnxModel(ModelCategory.SpeechSynthesis, onProgress);
   } catch (err) {
-    log.warning(`TTS preload skipped: ${err}`);
-    onProgress?.('TTS', true);
+    log.warning(`TTS preload failed: ${err}`);
+    onProgress?.({ model: 'TTS', modelName: 'Piper English (Amy)', modelSize: '63 MB', state: 'error', progress: 0, error: String(err) });
   }
 
   // Final refresh to capture all states

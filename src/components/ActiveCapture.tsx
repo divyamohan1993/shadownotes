@@ -509,7 +509,7 @@ Example:
       setAgentActive(true);
     } catch (err) {
       console.warn('[ShadowNotes] Voice agent failed to start:', err);
-      setAgentError('Voice Agent requires RunAnywhere ONNX models');
+      setAgentError(err instanceof Error ? err.message : 'Voice Agent requires RunAnywhere ONNX models');
       setAgentActive(false);
       voiceAgentRef.current = null;
       agentCaptureRef.current = null;

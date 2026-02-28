@@ -100,10 +100,9 @@ After models load, you enter the capture screen:
 
 1. Click **"BEGIN CAPTURE"** to activate your microphone. On-device STT via ONNX is used when available; otherwise, the Web Speech API provides a graceful fallback.
 2. Speak naturally — **on-device VAD** (Voice Activity Detection) monitors real audio levels and detects actual speech, distinguishing it from background noise. The 12-bar audio visualizer reflects real VAD audio levels (not animated placeholders).
-3. When you finish a phrase, the segment goes through a **three-layer extraction cascade**:
-   - **Layer 1 — LLM Streaming**: The on-device LLM (`TextGeneration.generateStream()`) analyzes the transcript and streams structured intelligence tokens in real-time.
-   - **Layer 2 — Tool Calling**: If the LLM supports it, structured tool-calling extraction runs as a secondary pass.
-   - **Layer 3 — Keywords**: If the LLM is still loading or unavailable, keyword-based extraction provides instant fallback results.
+3. When you finish a phrase, the segment goes through a **two-layer extraction pipeline**:
+   - **Layer 1 — LLM Generation**: The on-device LLM (`TextGeneration.generateStream()`) analyzes the transcript via a single LLM generation, streaming structured intelligence tokens in real-time. Results are parsed via `StructuredOutput` JSON extraction and line-based `[Category] content` parsing.
+   - **Layer 2 — Keywords**: If the LLM is still loading or unavailable, keyword regex extraction provides instant fallback results.
 4. **Embeddings-based semantic deduplication** (via the EMB model) prevents duplicate findings from appearing in the intelligence panel. Similar extractions are merged automatically.
 5. Streaming LLM output appears token-by-token with a cursor blink animation. Results are validated via `StructuredOutput.extractJson()` and grouped by category.
 6. After extraction completes, **on-device TTS** provides spoken voice feedback summarizing what was extracted, giving you audio confirmation without looking at the screen.

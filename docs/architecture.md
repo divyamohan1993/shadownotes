@@ -95,8 +95,10 @@ Intelligence Extraction (branching):
     +--- LLM Ready? --YES--> TextGeneration.generateStream()  <-- Gemma 3 1B (llama.cpp WASM, ~900MB)
     |                              |                            topK:40, topP:0.9, stopSequences
     |                              | Stream tokens -> live UI
-    |                              | StructuredOutput.extractJson() for JSON validation
-    |                              | Parse: /^\[([^\]]+)\]\s*(.+)/
+    |                              v
+    |                         Unified Parsing:
+    |                              | 1. StructuredOutput.extractJson() for JSON responses
+    |                              | 2. Line-based regex: /^\[([^\]]+)\]\s*(.+)/
     |                              v
     |                         LLM items found?
     |                              |
@@ -114,7 +116,7 @@ IntelligenceItem[] -> React State      IntelligenceItem[] -> React State
 
 ### Extraction Layers
 
-1. **RunAnywhere LLM (primary)**: Gemma 3 1B Instruct model processes transcript text with domain-specific system prompts via `TextGeneration.generateStream()`. Tokens stream to the UI in real-time. Outputs structured `[Category] finding` lines parsed by regex. `StructuredOutput.extractJson()` validates JSON-formatted responses as a secondary parsing path. Advanced sampling: `topK: 40`, `topP: 0.9`, `stopSequences`. Runs entirely on-device via llama.cpp WASM.
+1. **RunAnywhere LLM with Unified Parsing (primary)**: Gemma 3 1B Instruct model processes transcript text with domain-specific system prompts via a single `TextGeneration.generateStream()` call. Tokens stream to the UI in real-time. The response is parsed through unified parsing: `StructuredOutput.extractJson()` handles JSON-formatted responses, and line-based regex (`/^\[([^\]]+)\]\s*(.+)/`) handles bracketed `[Category] finding` lines. Advanced sampling: `topK: 40`, `topP: 0.9`, `stopSequences`. Runs entirely on-device via llama.cpp WASM.
 
 2. **Keyword Extraction (fallback)**: Regex-based pattern matching engine in `src/extraction.ts`. Zero memory overhead, instant results. Domain-specific rules for medical, security, legal, and incident domains. Used when LLM is loading or unavailable.
 
@@ -180,7 +182,7 @@ ShadowNotes deeply integrates the RunAnywhere Web SDK across all three packages 
 |-------------|----------|---------------|
 | **Streaming Text Generation** | `TextGeneration.generateStream()` | Core extraction engine. Streams tokens into intelligence panel with cursor animation. |
 | **Structured Output** | `StructuredOutput.extractJson()` | JSON schema validation fallback for reliable parsing. |
-| **ToolCalling** | `ToolCalling.generateWithTools()` | Secondary extraction path with domain-specific tools (`extract_finding`, `flag_anomaly`). Deterministic structured extraction with confidence scoring and anomaly detection. |
+| **ToolCalling** | `ToolCalling.generateWithTools()` | Available as an SDK feature but no longer used in the active extraction pipeline. The single-generation approach with unified parsing replaced the separate ToolCalling extraction path. |
 | **Embeddings** | `Embeddings.embed()`, `embedBatch()`, `cosineSimilarity()` | Semantic deduplication of extracted findings (0.85 cosine threshold). Batch embedding with caching for efficiency. |
 | **Advanced Sampling** | `topK`, `topP`, `temperature`, `stopSequences` | `topK: 40`, `topP: 0.9`, `temperature: 0.3` for factual extraction. Configurable via presets. |
 | **LlamaCPP Framework** | `LlamaCPP.register()` | Inference backend with WebGPU acceleration and automatic CPU fallback. |
@@ -204,7 +206,6 @@ src/
   App.tsx                        # App shell: boot sequence, screen routing, session state
   runanywhere.ts                 # SDK init — all 3 packages, GPU detection, crash recovery
   extraction.ts                  # Keyword-based intelligence extraction (regex fallback)
-  toolExtraction.ts              # ToolCalling-based structured extraction engine
   crypto.ts                      # AES-256-GCM + HKDF + PBKDF2 (random per-vault salt)
   auth.ts                        # WebAuthn with PRF extension (chunked base64)
   vault.ts                       # Encrypted IndexedDB storage layer

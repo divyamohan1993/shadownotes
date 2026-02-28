@@ -15,7 +15,7 @@ ShadowNotes is an offline-first, encrypted field intelligence app. Voice → on-
 | Security | AES-256-GCM per-case, WebAuthn PRF vault unlock |
 | Storage | IndexedDB (50 MB quota) + OPFS (model cache) |
 | Deploy | Vercel (web), Electron 35 (desktop) |
-| Tests | 163 tests via Vitest — all passing |
+| Tests | 231 tests via Vitest — all passing |
 | Live URL | https://shadownotes.dmj.one / https://vibe-with-singularity.vercel.app |
 | Repo | https://github.com/divyamohan1993/shadownotes.git |
 
@@ -25,7 +25,7 @@ ShadowNotes is an offline-first, encrypted field intelligence app. Voice → on-
 npm install              # Install deps (uses legacy-peer-deps via .npmrc)
 npm run dev              # Vite dev server on localhost:5173
 npm run build            # TypeScript check + Vite production build → dist/
-npm run test             # Run all 163 tests once
+npm run test             # Run all 231 tests once
 npm run test:watch       # Tests in watch mode
 npm run test:coverage    # Coverage report
 npm run electron:dev     # Electron dev mode
@@ -47,7 +47,7 @@ src/
 ├── voiceCommands.ts      # "Hey shadow" wake word + command parser
 ├── components/           # UI screens (VaultUnlock, SessionInit, CaseList, ActiveCapture, etc.)
 ├── hooks/                # useAutoSave, useModelLoader, useAudioPipeline, useTTS, useEmbeddings
-├── __tests__/            # 163 unit + integration tests + mocks
+├── __tests__/            # 231 unit + integration tests + mocks
 └── styles/index.css      # Global stylesheet
 
 electron/                 # Electron main + preload
@@ -85,7 +85,7 @@ vercel.json               # Security headers, COEP/CSP, WASM caching
 
 ## Testing
 
-All 163 tests must pass before any push. Run `npm run test` to verify. Tests use jsdom + fake-indexeddb. Mocks for RunAnywhere packages live in `src/__tests__/__mocks__/`.
+All 231 tests must pass before any push. Run `npm run test` to verify. Tests use jsdom + fake-indexeddb. Mocks for RunAnywhere packages live in `src/__tests__/__mocks__/`.
 
 ## Keyboard Shortcuts
 

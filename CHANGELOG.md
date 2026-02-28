@@ -2,6 +2,25 @@
 
 All notable changes to ShadowNotes are documented in this file.
 
+## [1.3.1] - 2026-02-28
+
+### Fixed
+
+- **Multiple LLM Generations Firing Per Extraction** — `extractWithFallback` was cascading through up to 3 separate LLM generation paths: `TextGeneration.generateStream()` (primary), `ToolCalling.generateWithTools()` with `autoExecute: true` and `maxToolCalls: 30` (secondary, up to 30 internal generations), and an Ollama timeout-retry fallback (tertiary). Consolidated to a single LLM generation per extraction with unified parsing (StructuredOutput JSON + line-based `[Category] fact` parsing). Removed the separate `extractWithTools` import and the `tryOllamaExtraction` callback that caused cascading generations.
+
+### Changed
+
+- **Two-Layer Extraction Pipeline** — Extraction pipeline simplified from three-layer cascade (LLM streaming → ToolCalling → Keywords) to two-layer pipeline (single LLM generation with unified parsing → keyword regex fallback). One generation call, one response, all parsing strategies applied to that single output.
+- **Unified Parsing for All Engines** — Both Ollama (Electron desktop) and embedded LLM (WASM) now share the same parsing pipeline: StructuredOutput JSON extraction → line-based `[Category] fact` parsing → embeddings deduplication. Previously Ollama had its own separate parsing path that skipped JSON extraction.
+
+### Testing
+
+- All 231 tests pass across 18 test files.
+- TypeScript strict mode: 0 errors.
+- Production build: clean.
+
+---
+
 ## [1.3.0] - 2026-02-28
 
 ### Added

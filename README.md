@@ -37,7 +37,7 @@ ShadowNotes deeply integrates all three RunAnywhere SDK packages — **20+ load-
 |-------------|---------|---------------|
 | **`TextGeneration.generateStream()`** | `web-llamacpp` | Core extraction engine. Gemma 3 1B Instruct streams tokens one-by-one with real-time cursor animation. Domain-specific system prompts guide extraction and correct speech errors. |
 | **`StructuredOutput.extractJson()`** | `web-llamacpp` | JSON schema-guided validation fallback for reliable parsing when LLM returns structured data. |
-| **`ToolCalling.generateWithTools()`** | `web-llamacpp` | Structured tool-call extraction with `extract_finding` and `flag_anomaly` tools. Uses `toToolValue`/`fromToolValue` for proper serialization. |
+| **`ToolCalling.generateWithTools()`** | `web-llamacpp` | Available SDK feature for structured tool-call extraction. Not used in the active extraction pipeline. |
 | **`Embeddings` + `findSimilar()`** | `web-llamacpp` | Semantic deduplication, RAG context retrieval (`buildRAGContext`), and GlobalSearch reranking via cosine similarity. |
 | **`VoicePipeline` + `VoiceAgent`** | `web` | Hands-free agent mode: continuous listen → process → respond loop for field operatives. |
 | **`SDKLogger`** | `web` | Structured logging throughout SDK integration (replaces raw `console.*`). |
@@ -73,7 +73,7 @@ for await (const token of stream.stream) {
 
 ### AI & Extraction
 - **Streaming AI Extraction** — Token-by-token LLM output with real-time UI feedback via `TextGeneration.generateStream()`
-- **Three-Layer Extraction Cascade** — ToolCalling (structured) → LLM streaming (free-form) → Keyword regex (instant fallback)
+- **Two-Layer Extraction** — Single LLM generation (StructuredOutput JSON + line-based parsing) → Keyword regex fallback
 - **VoiceAgent Hands-Free Mode** — `VoicePipeline` + `VoiceAgent` orchestrate a continuous listen-process-respond loop without manual button presses
 - **RAG Context Injection** — `buildRAGContext()` uses embeddings to semantically retrieve relevant prior findings and inject them into the LLM prompt
 - **Semantic Search Reranking** — GlobalSearch uses `findSimilar()` from the embeddings engine to rerank results by semantic relevance
@@ -154,9 +154,7 @@ npm run preview
 ### Data Flow
 
 ```
-Microphone -> AudioCapture/VAD -> STT (on-device) -> RunAnywhere LLM (streaming extraction)
-                                                   -> ToolCalling (structured extraction)
-                                                   -> StructuredOutput (JSON validation)
+Microphone -> AudioCapture/VAD -> STT (on-device) -> RunAnywhere LLM (single generation + StructuredOutput parsing)
                                                    -> Keyword fallback (instant, if LLM loading)
                                                    -> Embeddings (RAG context + dedup)
 ```
@@ -166,7 +164,7 @@ Microphone -> AudioCapture/VAD -> STT (on-device) -> RunAnywhere LLM (streaming 
 3. **Authenticate** — WebAuthn biometric or passphrase unlock (brute-force protected) derives encryption keys
 4. **Session Init** — Select domain profile. LLM begins downloading in background with progress tracking
 5. **Voice Capture** — Three modes: MIC (push-to-talk), TEXT (manual input), AGENT (hands-free VoiceAgent loop)
-6. **Three-Layer Extraction** — ToolCalling → LLM streaming → Keyword regex, with RAG context from prior findings
+6. **Two-Layer Extraction** — Single LLM generation (with StructuredOutput JSON + line-based parsing) → Keyword regex fallback, with RAG context from prior findings
 7. **Session Dossier** — Complete summary view with grouped findings, copy/edit/delete per item
 8. **Vault** — Sessions encrypted with AES-256-GCM (per-case HKDF keys) and stored in IndexedDB
 
@@ -185,7 +183,6 @@ Microphone -> AudioCapture/VAD -> STT (on-device) -> RunAnywhere LLM (streaming 
 src/
   App.tsx                    # App shell, boot sequence, error boundary, skeleton loading
   runanywhere.ts             # RunAnywhere SDK init — 3 packages, 20+ features, VoiceAgent factory
-  toolExtraction.ts          # ToolCalling-based structured extraction with fromToolValue
   extraction.ts              # Keyword-based intelligence extraction (regex fallback)
   crypto.ts                  # AES-256-GCM + HKDF + PBKDF2 encryption + schema validation
   perfConfig.tsx             # Capability-aware performance presets (auto-detect + manual)

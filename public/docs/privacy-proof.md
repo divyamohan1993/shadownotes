@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-ShadowNotes uses a fully on-device AI architecture that keeps all sensitive processing local. Intelligence extraction runs through a three-layer cascade: primary streaming LLM (`TextGeneration.generateStream()`), secondary deterministic ToolCalling extraction (`ToolCalling.generateWithTools()`), and instant keyword regex fallback — all on-device. The pipeline also includes embeddings-based semantic deduplication, on-device voice activity detection (VAD), on-device speech-to-text (STT) via ONNX when available (graceful fallback to Web Speech API), and on-device text-to-speech (TTS) for voice feedback. All session data is encrypted at rest with AES-256-GCM (with random per-vault PBKDF2 salt) and authenticated via WebAuthn biometrics. The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing features. No user data is sent to any external server by the application code.
+ShadowNotes uses a fully on-device AI architecture that keeps all sensitive processing local. Intelligence extraction runs through a two-layer pipeline: a single LLM generation with unified parsing (`TextGeneration.generateStream()` + `StructuredOutput.extractJson()`), and instant keyword regex fallback — all on-device. The pipeline also includes embeddings-based semantic deduplication, on-device voice activity detection (VAD), on-device speech-to-text (STT) via ONNX when available (graceful fallback to Web Speech API), and on-device text-to-speech (TTS) for voice feedback. All session data is encrypted at rest with AES-256-GCM (with random per-vault PBKDF2 salt) and authenticated via WebAuthn biometrics. The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing features. No user data is sent to any external server by the application code.
 
 ---
 
@@ -17,8 +17,7 @@ ShadowNotes uses a fully on-device AI architecture that keeps all sensitive proc
 | Voice Activity Detection | On-device VAD (`VAD.onSpeechActivity()` / `processSamples()`) | `@runanywhere/web-onnx` | On-device | None after model download |
 | Audio Capture | 16kHz mono via AudioCapture | `@runanywhere/web-onnx` | On-device | None |
 | Intelligence Extraction (Layer 1) | RunAnywhere Gemma 3 1B streaming (`TextGeneration.generateStream()`) | `@runanywhere/web-llamacpp` | On-device | None after model download |
-| Intelligence Extraction (Layer 2) | ToolCalling structured extraction (`ToolCalling.generateWithTools()`) | `@runanywhere/web-llamacpp` | On-device | None |
-| Intelligence Extraction (Layer 3) | Keyword regex matching | — | On-device | None |
+| Intelligence Extraction (Layer 2) | Keyword regex matching | — | On-device | None |
 | Structured Validation | `StructuredOutput.extractJson()` | `@runanywhere/web-llamacpp` | On-device | None |
 | Semantic Deduplication | Embeddings (`Embeddings.embed()` / `embedBatch()` / `cosineSimilarity()`) | `@runanywhere/web-llamacpp` | On-device | None |
 | Voice Feedback | On-device TTS (`TTS.synthesize()`) | `@runanywhere/web-onnx` | On-device | None after model download |
@@ -34,21 +33,20 @@ The architecture maximizes on-device processing while providing graceful degrada
 
 1. **On-device STT via ONNX** (`STT.transcribe()`) handles transcription when available — fully private, no network. Graceful fallback to Web Speech API on unsupported devices.
 2. **On-device VAD** (`VAD.onSpeechActivity()`) provides real voice activity levels — not animated placeholders, but actual speech detection driving the UI.
-3. **Three-layer extraction cascade** ensures reliable intelligence extraction:
-   - **Layer 1**: `TextGeneration.generateStream()` — primary streaming LLM extraction via llama.cpp WASM
-   - **Layer 2**: `ToolCalling.generateWithTools()` — deterministic secondary path with domain-specific tools (`extract_finding`, `flag_anomaly`)
-   - **Layer 3**: Keyword regex — instant fallback, zero memory, zero latency
+3. **Two-layer extraction pipeline** ensures reliable intelligence extraction:
+   - **Layer 1**: `TextGeneration.generateStream()` — single LLM generation with unified parsing via `StructuredOutput.extractJson()`, running in llama.cpp WASM
+   - **Layer 2**: Keyword regex — instant fallback, zero memory, zero latency
 4. **Embeddings-based deduplication** (`Embeddings.embed()` / `cosineSimilarity()`) prevents duplicate intelligence items using a 0.85 cosine similarity threshold — all computed on-device
 5. **On-device TTS** (`TTS.synthesize()`) provides voice feedback after extraction — no cloud synthesis
 6. **Device capability detection** (`detectCapabilities()`) probes WebGPU, WASM SIMD, available memory, and CPU cores to select optimal processing paths
 
-The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing SDK features: `RunAnywhere.initialize()`, ModelManager, EventBus, OPFSStorage, SDKLogger, VoicePipeline, VoiceAgent, `detectCapabilities()`, `LlamaCPP.register()`, `TextGeneration.generateStream()`, `StructuredOutput.extractJson()`, `ToolCalling.generateWithTools()`, `Embeddings.embed()`/`embedBatch()`/`cosineSimilarity()`, `ONNX.register()`, `STT.transcribe()`, `TTS.synthesize()`, `VAD.onSpeechActivity()`/`processSamples()`, AudioCapture (16kHz mono), and AudioPlayback — all running on-device.
+The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`, `@runanywhere/web-llamacpp`, `@runanywhere/web-onnx`) with 18+ genuinely load-bearing SDK features: `RunAnywhere.initialize()`, ModelManager, EventBus, OPFSStorage, SDKLogger, VoicePipeline, VoiceAgent, `detectCapabilities()`, `LlamaCPP.register()`, `TextGeneration.generateStream()`, `StructuredOutput.extractJson()`, `Embeddings.embed()`/`embedBatch()`/`cosineSimilarity()`, `ONNX.register()`, `STT.transcribe()`, `TTS.synthesize()`, `VAD.onSpeechActivity()`/`processSamples()`, AudioCapture (16kHz mono), and AudioPlayback — all running on-device.
 
 ### What This Means for Privacy
 
 - **Speech-to-text**: When the ONNX STT model is available, transcription runs entirely on-device via `STT.transcribe()` — zero network. On devices without ONNX support, graceful fallback to the browser's built-in Web Speech API (which on Chrome/Edge may route audio through Google's speech service).
 - **Voice activity detection**: Real VAD via `VAD.onSpeechActivity()` processes audio samples on-device. No audio data leaves the browser.
-- **Intelligence extraction**: 100% on-device through all three cascade layers. The streaming LLM, ToolCalling structured extraction, and keyword fallback all process transcript text locally. No findings, categorizations, or structured intelligence data leave the device.
+- **Intelligence extraction**: 100% on-device through both extraction layers. The streaming LLM with unified parsing and keyword fallback both process transcript text locally. No findings, categorizations, or structured intelligence data leave the device.
 - **Semantic deduplication**: Embeddings computed on-device via `Embeddings.embed()`. Cosine similarity comparisons run locally — no vector data is transmitted.
 - **Voice feedback**: TTS synthesis via `TTS.synthesize()` runs on-device. No text is sent to cloud synthesis services.
 - **Session data**: Encrypted at rest with AES-256-GCM in an IndexedDB vault, authenticated via WebAuthn biometrics. Keys are derived per-case via HKDF with random per-vault PBKDF2 salt (`generateVaultSalt()`), so compromising one case does not expose others. DESTROY SESSION wipes vault entry + heap memory irrecoverably.
@@ -57,9 +55,9 @@ The RunAnywhere SDK is integrated across all three packages (`@runanywhere/web`,
 
 ## 2. On-Device AI Processing
 
-### Three-Layer Extraction Cascade
+### Two-Layer Extraction Pipeline
 
-The intelligence extraction pipeline uses a three-layer cascade — each layer provides progressively simpler but more reliable extraction:
+The intelligence extraction pipeline uses a two-layer design — the primary layer provides high-quality LLM extraction with unified parsing, while the fallback layer provides instant regex-based extraction:
 
 ```
 Audio input (microphone)
@@ -72,16 +70,10 @@ Transcript text
     ↓
 ┌─── Layer 1: TextGeneration.generateStream(systemPrompt + text) ───┐
 │    llama.cpp WASM, streaming tokens to UI in real-time             │
-│    StructuredOutput.extractJson() — JSON validation                │
+│    StructuredOutput.extractJson() — unified JSON parsing           │
 └────────────────────────────────────────────────────────────────────┘
     ↓ if Layer 1 fails or is loading
-┌─── Layer 2: ToolCalling.generateWithTools(text, tools) ───────────┐
-│    Deterministic structured extraction via domain-specific tools    │
-│    Tools: extract_finding, flag_anomaly                            │
-│    Returns structured JSON with categories + findings              │
-└────────────────────────────────────────────────────────────────────┘
-    ↓ if Layer 2 fails or is loading
-┌─── Layer 3: Keyword regex matching ───────────────────────────────┐
+┌─── Layer 2: Keyword regex matching ───────────────────────────────┐
 │    Instant fallback — zero memory, zero latency                    │
 │    Domain-specific pattern rules (medical, security, legal, etc.)  │
 └────────────────────────────────────────────────────────────────────┘
@@ -97,7 +89,7 @@ TTS.synthesize() — voice feedback after extraction
 Screen render (DOM — in memory)
 ```
 
-**At no point does intelligence extraction data leave the browser sandbox.** All three cascade layers, embeddings deduplication, and voice feedback process data locally — matching the UX of cloud AI services without any network transmission.
+**At no point does intelligence extraction data leave the browser sandbox.** Both extraction layers, embeddings deduplication, and voice feedback process data locally — matching the UX of cloud AI services without any network transmission.
 
 ### Layer 1: Streaming LLM Extraction
 
@@ -107,16 +99,7 @@ The Gemma 3 1B Instruct Q4_K_M model runs in llama.cpp WASM inside the browser s
 - `StructuredOutput.extractJson()` validates the output as well-formed JSON
 - Primary extraction path — highest quality, most resource-intensive
 
-### Layer 2: ToolCalling Structured Extraction
-
-When Layer 1 is unavailable or for deterministic secondary extraction:
-
-- `ToolCalling.generateWithTools()` invokes domain-specific tools (`extract_finding`, `flag_anomaly`)
-- Returns structured JSON with categories and findings
-- Deterministic — same input produces same structured output
-- Runs entirely on-device via llama.cpp WASM
-
-### Layer 3: Keyword Regex Fallback
+### Layer 2: Keyword Regex Fallback
 
 When the LLM is loading or unavailable, `src/extraction.ts` provides instant regex-based extraction:
 
@@ -317,7 +300,7 @@ Tests verify:
 |------------|-----------------|---------|
 | React / ReactDOM | None | UI rendering (client-side only) |
 | RunAnywhere Web SDK (`@runanywhere/web`) | Model download only (one-time) | `RunAnywhere.initialize()`, ModelManager, EventBus, OPFSStorage, SDKLogger, VoicePipeline, VoiceAgent, `detectCapabilities()` |
-| RunAnywhere Web-LlamaCPP (`@runanywhere/web-llamacpp`) | None after load | `LlamaCPP.register()`, `TextGeneration.generateStream()`, `StructuredOutput.extractJson()`, `ToolCalling.generateWithTools()`, `Embeddings.embed()`/`embedBatch()`/`cosineSimilarity()` |
+| RunAnywhere Web-LlamaCPP (`@runanywhere/web-llamacpp`) | None after load | `LlamaCPP.register()`, `TextGeneration.generateStream()`, `StructuredOutput.extractJson()`, `Embeddings.embed()`/`embedBatch()`/`cosineSimilarity()` |
 | RunAnywhere Web-ONNX (`@runanywhere/web-onnx`) | Model download only (one-time) | `ONNX.register()`, `STT.transcribe()`, `TTS.synthesize()`, `VAD.onSpeechActivity()`/`processSamples()`, AudioCapture (16kHz mono), AudioPlayback |
 | Web Speech API | Browser-managed | Speech-to-text transcription (fallback when ONNX STT unavailable) |
 | Web Crypto API | None | AES-256-GCM, HKDF, PBKDF2 (browser-native) |
@@ -330,7 +313,7 @@ Tests verify:
 
 ShadowNotes achieves **fully on-device AI processing with defense-in-depth security** through:
 
-1. **Three-layer extraction cascade** — primary streaming LLM (`TextGeneration.generateStream()`), secondary ToolCalling (`ToolCalling.generateWithTools()` with `extract_finding`/`flag_anomaly` tools), and instant keyword regex fallback — all on-device
+1. **Two-layer extraction pipeline** — single LLM generation with unified parsing (`TextGeneration.generateStream()` + `StructuredOutput.extractJson()`), and instant keyword regex fallback — all on-device
 2. **Structured validation** — `StructuredOutput.extractJson()` ensures reliable extraction format — all on-device
 3. **Semantic deduplication** — `Embeddings.embed()`/`embedBatch()`/`cosineSimilarity()` prevent duplicate intelligence items at 0.85 threshold — all on-device
 4. **On-device speech pipeline** — `STT.transcribe()` (ONNX), `VAD.onSpeechActivity()`/`processSamples()` (real voice activity), `TTS.synthesize()` (voice feedback), AudioCapture (16kHz mono) — graceful fallback to Web Speech API

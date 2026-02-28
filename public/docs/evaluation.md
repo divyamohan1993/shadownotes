@@ -41,11 +41,8 @@ The previous round already integrated all three SDK packages with 20+ load-beari
 **@runanywhere/web-llamacpp** (LLM + structured extraction + embeddings):
 - `LlamaCPP.register()` with GPU crash recovery and CPU fallback retry
 - `TextGeneration.generateStream()` — streaming token-by-token extraction with `topK`, `topP`, `temperature`, `stopSequences`, `maxTokens`, `systemPrompt` all configured for factual extraction
-- `StructuredOutput.extractJson()` — JSON validation fallback
-- `ToolCalling.registerTool()` — registers domain-specific tools with typed parameters and `enumValues` constraints
-- `ToolCalling.generateWithTools()` — structured extraction with `maxToolCalls: 30`, `autoExecute: true`, `temperature: 0.1`, `maxTokens: 2048`
-- `ToolCalling.unregisterTool()` / `ToolCalling.getRegisteredTools()` — clean lifecycle management in try/finally blocks
-- `toToolValue()`, `getStringArg()`, `getNumberArg()` — typed argument marshaling for tool call results
+- `StructuredOutput.extractJson()` — JSON validation within unified parsing pipeline
+- ToolCalling is available in the SDK but is not used in the extraction pipeline
 - `Embeddings.embed()` — single-text embedding with caching in a `Map<string, Float32Array>`
 - `Embeddings.embedBatch()` — batch embedding with cache-aware splitting (only uncached texts sent to WASM)
 - `Embeddings.cosineSimilarity()` — pairwise comparison for deduplication (0.85 threshold) and semantic search ranking
@@ -66,7 +63,7 @@ The previous round already integrated all three SDK packages with 20+ load-beari
 
 ### What earns the 9.5
 
-Every SDK feature above was verified in source with real API calls, real parameters, error handling, and graceful fallback stubs. The three-layer extraction cascade (LLM streaming -> ToolCalling -> Keywords) is a genuine architectural decision, not decoration. Embeddings deduplication runs on real cosine similarity vectors. The audio pipeline (AudioCapture -> VAD -> STT) is a complete on-device speech processing chain. TTS provides voice feedback after extraction. `VoicePipeline` and `VoiceAgent` are now actively orchestrated in a hands-free agent mode — the user can speak naturally and receive contextual spoken responses, completing the full voice AI loop. RAG context injection via embeddings retrieves semantically relevant prior findings and feeds them into the LLM prompt, making extraction aware of cross-session context.
+Every SDK feature above was verified in source with real API calls, real parameters, error handling, and graceful fallback stubs. The two-layer extraction pipeline (single LLM generation with unified parsing -> keyword fallback) is a genuine architectural decision, not decoration. Embeddings deduplication runs on real cosine similarity vectors. The audio pipeline (AudioCapture -> VAD -> STT) is a complete on-device speech processing chain. TTS provides voice feedback after extraction. `VoicePipeline` and `VoiceAgent` are now actively orchestrated in a hands-free agent mode — the user can speak naturally and receive contextual spoken responses, completing the full voice AI loop. RAG context injection via embeddings retrieves semantically relevant prior findings and feeds them into the LLM prompt, making extraction aware of cross-session context.
 
 ### Why not 10.0
 
@@ -80,27 +77,21 @@ Every SDK feature above was verified in source with real API calls, real paramet
 
 ### What changed since 7.5/10
 
-The previous round established the three-layer extraction cascade, embeddings deduplication, domain-specific ToolCalling, and the full on-device audio pipeline. This round adds two significant innovations: a RAG pipeline that retrieves semantically relevant prior findings via `Embeddings.cosineSimilarity()` and injects them as context into the LLM extraction prompt, and a `VoiceAgent` conversational interaction mode that allows users to speak commands and receive spoken responses — turning ShadowNotes from a transcription tool into an interactive voice AI assistant.
+The previous round established the two-layer extraction pipeline, embeddings deduplication, and the full on-device audio pipeline. This round adds two significant innovations: a RAG pipeline that retrieves semantically relevant prior findings via `Embeddings.cosineSimilarity()` and injects them as context into the LLM extraction prompt, and a `VoiceAgent` conversational interaction mode that allows users to speak commands and receive spoken responses — turning ShadowNotes from a transcription tool into an interactive voice AI assistant.
 
 ### Verified Innovations
 
-**Three-Layer Extraction Cascade** (LLM -> ToolCalling -> Keywords):
-- Primary: `TextGeneration.generateStream()` with streaming token accumulation and JSON extraction
-- Secondary: `ToolCalling.generateWithTools()` with domain-specific tool definitions (`extract_finding` with confidence scoring, `flag_anomaly` with severity levels and related categories)
-- Tertiary: Keyword regex extraction as zero-dependency fallback
-- Each layer has independent error handling; failure at any layer cascades cleanly to the next
+**Two-Layer Extraction Pipeline** (single LLM generation -> keyword fallback):
+- Primary: `TextGeneration.generateStream()` with streaming token accumulation and unified parsing (StructuredOutput JSON + line-based parsing)
+- Secondary: Keyword regex extraction as zero-dependency fallback
+- Each layer has independent error handling; failure at the primary layer cascades cleanly to the fallback
 - This is a genuine architectural pattern, not commonly seen in hackathon projects
 
 **Embeddings-Based Semantic Deduplication**:
 - `Embeddings.embedBatch()` with cache-aware splitting (avoids recomputing known vectors)
 - `Embeddings.cosineSimilarity()` at 0.85 threshold for near-duplicate detection
-- Applied at every extraction layer independently (LLM results, ToolCalling results, Ollama results)
+- Applied to LLM extraction results
 - `findSimilar()` for semantic search ranking — a real vector similarity search in-browser
-
-**ToolCalling with Domain-Specific Schemas**:
-- `extract_finding` tool with typed parameters: `category` (enum-constrained to domain categories), `content` (string), `confidence` (number 0-1)
-- `flag_anomaly` tool with `description`, `severity` (enum: critical/high/medium/low), `related_categories` (array)
-- This is structured extraction through function calling — the same pattern used by OpenAI's function calling API, but running entirely on-device
 
 **Full On-Device Audio Pipeline**:
 - AudioCapture (16kHz mono) -> VAD (real-time speech detection) -> STT (segment transcription) -> TTS (voice feedback)
@@ -120,12 +111,12 @@ The previous round established the three-layer extraction cascade, embeddings de
 
 ### What earns the 9.0
 
-The three-layer cascade with semantic deduplication is a genuinely creative architecture. Domain-specific ToolCalling schemas with confidence scoring and anomaly flagging go beyond simple text extraction. The full audio pipeline in-browser is technically ambitious. The RAG pipeline — using on-device embeddings to retrieve and inject prior findings as LLM context — is a genuine retrieval-augmented generation implementation, not a buzzword. The VoiceAgent conversational mode adds a novel interaction paradigm for field intelligence work.
+The two-layer extraction pipeline with unified parsing and semantic deduplication is a genuinely creative architecture. The full audio pipeline in-browser is technically ambitious. The RAG pipeline — using on-device embeddings to retrieve and inject prior findings as LLM context — is a genuine retrieval-augmented generation implementation, not a buzzword. The VoiceAgent conversational mode adds a novel interaction paradigm for field intelligence work.
 
 ### Why not 10.0
 
 - Speech error correction is still prompt-based rather than using a custom decoder or post-processing model
-- The 1B model limits the quality ceiling for the ToolCalling extraction — larger models would make the structured extraction and RAG retrieval more reliable
+- The 1B model limits the quality ceiling for structured extraction — larger models would make the extraction and RAG retrieval more reliable
 - No custom model training or fine-tuning for the specific domain
 
 ---
@@ -240,7 +231,6 @@ The previous round addressed the deterministic PBKDF2 salt, added CSP headers, D
 
 **Clean Module Architecture**:
 - `runanywhere.ts` — single entry point registering all 3 SDK packages with re-exports
-- `toolExtraction.ts` — ToolCalling extraction engine with domain-specific tool definitions
 - `useAudioPipeline.ts` — AudioCapture + VAD + STT pipeline as React hook
 - `useTTS.ts` — TTS synthesis + AudioPlayback as React hook
 - `useEmbeddings.ts` — Embeddings dedup + similarity search as React hook
@@ -347,7 +337,7 @@ The on-device audio pipeline transforms this from a "mostly private" to a "genui
 1. **All 3 SDK packages genuinely integrated** with 20+ load-bearing API calls, real parameters, and real error handling
 2. **VoicePipeline and VoiceAgent actively orchestrated** — hands-free voice agent mode, not just individual components
 3. **RAG context injection via embeddings** — semantically relevant prior findings injected into LLM extraction prompts
-4. **Three-layer extraction cascade** (LLM -> ToolCalling -> Keywords) with embeddings-based semantic deduplication
+4. **Two-layer extraction pipeline** (single LLM generation with unified parsing -> keyword fallback) with embeddings-based semantic deduplication
 5. **Onboarding tutorial** — first-run walkthrough eliminates cold-start confusion
 6. **Loading skeleton states** with shimmer animations during all async operations
 7. **Brute-force protection** — exponential backoff on vault unlock attempts
@@ -360,7 +350,7 @@ The on-device audio pipeline transforms this from a "mostly private" to a "genui
 
 ## Remaining Gaps for 10.0
 
-1. **Model quality** — upgrade from 1B to 4B for more reliable extraction, especially for ToolCalling and RAG retrieval
+1. **Model quality** — upgrade from 1B to 4B for more reliable extraction and RAG retrieval
 2. **Real-world validation** — user testing with actual security auditors, physicians, or attorneys
 3. **CI/CD hardening** — automated security scanning (SAST), dependency auditing, bundle size budgets in pipeline
 4. **Mobile optimization** — responsive design exists but one-handed mobile use is not optimized

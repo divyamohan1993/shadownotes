@@ -2,7 +2,9 @@
 
 ## System Overview
 
-ShadowNotes is a single-page React application that combines browser-native speech recognition with on-device AI intelligence extraction through the RunAnywhere Web SDK. The hybrid architecture ensures the app works on any device while leveraging on-device AI for sensitive data analysis. All session data is encrypted at rest with AES-256-GCM and authenticated via WebAuthn biometrics.
+ShadowNotes is a single-page React application that combines on-device speech recognition with on-device AI intelligence extraction through the RunAnywhere Web SDK. Built with the spirit of **Atmanirbhar Bharat** and the **#India2047** vision, the architecture ensures 100% on-device AI processing — no cloud dependency for any core operation. All session data is encrypted at rest with AES-256-GCM and authenticated via WebAuthn biometrics. The app runs on both web (Vercel) and desktop (Electron 35).
+
+> See [About the Hackathon & Vision](vision-india2047.md) for the full context on why this architecture prioritizes data sovereignty and on-device processing.
 
 ```
 +------------------------------------------------------------------+
@@ -122,13 +124,25 @@ IntelligenceItem[] -> React State      IntelligenceItem[] -> React State
 
 ## Model Registry
 
-Defined in `src/runanywhere.ts`:
+Defined in `src/runanywhere.ts`. Users can select from 3 LLM tiers based on device capability:
+
+### LLM Models (User-Selectable)
+
+| Model | ID | Framework | Size | Source | Use Case |
+|-------|----|-----------|------|--------|----------|
+| Gemma 3 1B Instruct Q4_K_M | `gemma-3-1b-it-q4_k_m` | LlamaCPP | ~810 MB | `bartowski/google_gemma-3-1b-it-GGUF` | Primary — highest quality extraction |
+| Qwen2.5 0.5B Instruct Q4_K_M | `qwen2.5-0.5b-instruct-q4_k_m` | LlamaCPP | ~400 MB | `bartowski/Qwen2.5-0.5B-Instruct-GGUF` | Balanced — mid-range devices |
+| SmolLM2 135M Instruct Q4_K_M | `smollm2-135m-instruct-q4_k_m` | LlamaCPP | ~100 MB | `bartowski/SmolLM2-135M-Instruct-GGUF` | Lightweight — low-resource devices |
+
+### ONNX Audio Models (Auto-Loaded at Boot)
 
 | Model | ID | Framework | Category | Size | Source |
 |-------|----|-----------|----------|------|--------|
-| Gemma 3 1B Instruct Q4_K_M | `gemma-3-1b-it-q4_k_m` | LlamaCPP | Language | ~810MB | `bartowski/google_gemma-3-1b-it-GGUF` (HuggingFace) |
+| Silero VAD | `silero-vad` | ONNX | Voice Activity Detection | ~2.3 MB | `deepghs/silero-vad-onnx` |
+| Whisper Tiny English (int8) | `whisper-tiny-en` | OpenAI Whisper | Speech Recognition | ~103 MB | `csukuangfj/sherpa-onnx-whisper-tiny.en` |
+| Piper English (Lessac) | `vits-piper-en_US-lessac-medium` | Piper TTS | Speech Synthesis | ~64 MB | `vits-piper-en_US-lessac-medium` |
 
-Total download: ~810MB (one-time, cached in OPFS)
+Total download: ~100–810 MB for LLM (user's choice) + ~170 MB for audio models (one-time, cached in OPFS)
 
 ## Domain Profiles
 
@@ -294,22 +308,56 @@ IndexedDB (encrypted blobs)
 - **Per-case encryption**: HKDF derives unique keys per case number, so compromising one case doesn't expose others
 - **Encrypted export/import**: `.shadow` files with independent passphrase encryption for sharing
 
+## PDF Export System
+
+ShadowNotes includes a professional PDF export system (`src/prescriptionPdf.ts`) via **jsPDF 4.2**, with domain-specific branding using Hindi names that honour India's heritage:
+
+| Domain | Hindi Name | Meaning | PDF Title |
+|--------|-----------|---------|-----------|
+| Medical | **Sanjeevani** (संजीवनी) | The Life-Giving Herb | dmj.one CSR Hospital — Sanjeevani |
+| Security | **Kavach** (कवच) | The Divine Shield | dmj.one CSR Cybersecurity — Kavach |
+| Legal | **Nyaaya** (न्याय) | The Path of Justice | dmj.one CSR Legal Services — Nyaaya |
+| Incident | **Prahari** (प्रहरी) | The Vigilant Sentinel | dmj.one CSR Incident Response — Prahari |
+
+Each domain generates a professionally formatted A4 document with header branding, metadata grid, categorized intelligence sections, signature blocks, and domain-specific colour schemes.
+
+## Desktop Application (Electron)
+
+ShadowNotes ships as a cross-platform desktop application via **Electron 35** + **electron-builder**:
+
+- Local HTTP server on `localhost` for WebAuthn support (requires secure context)
+- GPU flags enabled: WebGPU, Vulkan, SharedArrayBuffer, ANGLE D3D11
+- Context isolation with preload script (`contextBridge`, `nodeIntegration=false`)
+- Separate TypeScript config (`tsconfig.electron.json`)
+- Build scripts: `electron:dev`, `electron:build`, `electron:package`
+
 ## Key Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `@runanywhere/web` | 0.1.0-beta.9 | Core SDK: RunAnywhere.initialize(), ModelManager, EventBus, OPFSStorage |
-| `@runanywhere/web-llamacpp` | 0.1.0-beta.9 | LLM inference: TextGeneration.generateStream(), StructuredOutput, LlamaCPP framework |
+| `@runanywhere/web` | 0.1.0-beta.9 | Core SDK: RunAnywhere.initialize(), ModelManager, EventBus, OPFSStorage, VoicePipeline, VoiceAgent, SDKLogger, detectCapabilities() |
+| `@runanywhere/web-llamacpp` | 0.1.0-beta.9 | LLM: TextGeneration.generateStream(), StructuredOutput, ToolCalling, Embeddings, LlamaCPP framework |
+| `@runanywhere/web-onnx` | 0.1.0-beta.9 | Audio: STT (Whisper), TTS (Piper), VAD (Silero), AudioCapture, AudioPlayback |
 | `react` | ^19.2.4 | UI framework |
 | `react-dom` | ^19.2.4 | React DOM renderer |
-| `vite` | ^7.3.1 | Build tool |
-| `vite-plugin-pwa` | latest | Progressive Web App with service worker |
-| `typescript` | ^5.9.3 | Type checking |
+| `jspdf` | ^4.2.0 | PDF export with domain-specific Hindi branding |
+| `vosk-browser` | ^0.0.8 | Legacy STT engine (superseded by RunAnywhere ONNX Whisper) |
+| `vite` | ^7.3.1 | Build tool with custom WASM copy plugin |
+| `vite-plugin-pwa` | ^1.2.0 | Progressive Web App with Workbox offline caching |
+| `electron` | ^35.7.5 | Cross-platform desktop application framework |
+| `electron-builder` | ^26.8.1 | Desktop packaging and distribution |
+| `vite-plugin-electron` | ^0.29.0 | Vite + Electron integration |
+| `cross-env` | ^10.1.0 | Cross-platform environment variable handling |
+| `typescript` | ^5.9.3 | Type checking (strict mode) |
+| `eslint` | ^10.0.2 | Code quality with typescript-eslint and React Hooks rules |
 | `vitest` | ^4.0.18 | Test runner |
+| `@testing-library/react` | ^16.3.2 | Component testing with Testing Library |
+| `fake-indexeddb` | ^6.2.5 | IndexedDB mock for tests |
+| `jsdom` | ^28.1.0 | DOM simulation for test environment |
 
 ## Testing
 
-227 tests across 17 test files:
+231 tests across 18 test files:
 
 - **61 domain tests**: Domain profiles, case number generation, system prompt validation
 - **21 extraction tests**: Keyword-based intelligence extraction across all 4 domains

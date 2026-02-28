@@ -4,7 +4,25 @@
 
 > No cloud. No API keys. No servers. No trace. Every byte of AI processing runs on YOUR device.
 
-[Live Demo](https://shadownotes.dmj.one) | [Demo Video](https://youtube.com/watch?v=qqV9ezvwY6U) | [Field Manual](https://shadownotes.dmj.one/docs/field-manual.html)
+[Live Demo](https://shadownotes.dmj.one) | [Demo Video](https://youtube.com/watch?v=qqV9ezvwY6U) | [Field Manual](https://shadownotes.dmj.one/docs/field-manual.html) | [About the Hackathon & Vision](docs/vision-india2047.md)
+
+---
+
+## The Vision — Atmanirbhar Bharat meets India 2047
+
+ShadowNotes is built with the spirit of **Atmanirbhar Bharat** (Self-Reliant India) and the **#India2047** vision at its core. Built for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) hackathon, facilitated by **ThoughtWorks Technologies**, this project demonstrates that critical AI-powered tools handling sensitive data — medical records, legal depositions, security audits, incident reports — must not depend on foreign cloud infrastructure.
+
+As **Prof. Yoshua Bengio** (Turing Award 2018, Université de Montréal) emphasized at the **AI Impact Summit**, responsible AI deployment requires privacy by design, data governance, and democratization of AI capabilities. ShadowNotes answers this call: **every byte of AI processing runs on the user's device**, with zero network transmission of data — not as a privacy policy, but as an architectural guarantee.
+
+**Why this matters for India:**
+- Physicians in rural clinics can dictate AI-powered prescriptions without internet connectivity
+- Security auditors can document vulnerabilities without data leaving Indian soil
+- Legal practitioners can transcribe depositions with full attorney-client privilege
+- Incident responders can capture real-time intelligence at disaster sites, fully offline
+
+Each domain carries a Hindi name honouring India's heritage: **Sanjeevani** (Medical — "The Life-Giving Herb"), **Kavach** (Security — "The Divine Shield"), **Nyaaya** (Legal — "The Path of Justice"), **Prahari** (Incident — "The Vigilant Sentinel").
+
+> Read the full vision: [About the Hackathon & India 2047 Vision](docs/vision-india2047.md)
 
 ---
 
@@ -107,17 +125,21 @@ for await (const token of stream.stream) {
 
 | Component | Technology |
 |-----------|-----------|
-| Framework | React 19 + TypeScript (strict mode) |
-| Build Tool | Vite 7 |
+| Framework | React 19 + TypeScript 5.9 (strict mode) |
+| Build Tool | Vite 7 + ESLint 10 |
 | AI SDK | RunAnywhere Web SDK — `web`, `web-llamacpp`, `web-onnx` (3 packages, 20+ features) |
-| LLM | Gemma 3 1B Instruct Q4_K_M via llama.cpp WASM |
-| STT | Web Speech API (browser) + ONNX STT (on-device) |
-| Audio AI | VAD, TTS, AudioCapture, AudioPlayback via `@runanywhere/web-onnx` |
-| Encryption | AES-256-GCM + HKDF + PBKDF2 (600K iterations) |
-| Auth | WebAuthn with PRF extension |
-| Styling | Custom CSS — JetBrains Mono + Special Elite fonts |
-| PWA | Workbox service worker with 8MB model cache |
-| Testing | Vitest + Testing Library — 227 tests |
+| LLM Models | 3-tier selection: Gemma 3 1B, Qwen2.5 0.5B, SmolLM2 135M — all via llama.cpp WASM |
+| STT | Whisper Tiny English (on-device ONNX) + Web Speech API (browser fallback) |
+| VAD | Silero VAD (on-device ONNX, ~2.3 MB) — real voice activity detection |
+| TTS | Piper (Lessac Medium, on-device ONNX) — spoken feedback after extraction |
+| Embeddings | On-device via LlamaCPP — semantic dedup, RAG context, search reranking |
+| Encryption | AES-256-GCM + HKDF + PBKDF2 (600K iterations) via WebCrypto API |
+| Auth | WebAuthn with PRF extension (Windows Hello / Touch ID / Face ID) |
+| PDF Export | jsPDF 4.2 — domain-specific professional reports (Sanjeevani, Kavach, Nyaaya, Prahari) |
+| Desktop | Electron 35 + electron-builder — cross-platform desktop with GPU acceleration |
+| Styling | Custom CSS — JetBrains Mono + Special Elite fonts, classified dossier aesthetic |
+| PWA | vite-plugin-pwa + Workbox — full offline support, installable |
+| Testing | Vitest 4 + Testing Library — 231 tests across 18 files |
 
 ## Getting Started
 
@@ -238,7 +260,7 @@ Cross-Origin-Embedder-Policy: credentialless
 ## Testing
 
 ```bash
-npx vitest run      # Run all 227 tests
+npx vitest run      # Run all 231 tests
 npm run test:watch  # Watch mode
 ```
 
@@ -253,4 +275,6 @@ MIT
 
 ---
 
-Built for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) Hackathon by [Divya Mohan](https://github.com/divyamohan1993) & Kumkum Thakur (GGSIPU, Delhi).
+Built with the spirit of **Atmanirbhar Bharat** for the [RunAnywhere Vibe Challenge](https://vibechallenge.runanywhere.org/) Hackathon, facilitated by **ThoughtWorks Technologies**, by [Divya Mohan](https://github.com/divyamohan1993) & Kumkum Thakur (GGSIPU, Delhi). **#India2047**
+
+*ShadowNotes: Because some notes should never exist anywhere but your memory — and some technology should never depend on anyone but your own device.*

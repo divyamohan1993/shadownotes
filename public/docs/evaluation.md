@@ -255,13 +255,13 @@ The previous round addressed the deterministic PBKDF2 salt, added CSP headers, D
 - These complement the existing CSP, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY`
 
 **Test Suite**:
-- 227 tests passing across 17 test files (verified via `npx vitest run`)
-- Unit, component, and integration coverage
+- 231 tests passing across 18 test files (verified via `npx vitest run`)
+- Unit, component, integration, and e2e coverage
 - Test mocks for all 3 SDK packages
 
 ### What earns the 9.5
 
-Random per-vault PBKDF2 salt, comprehensive CSP, DoS protection with limits, schema validation with positional errors, chunked encoding, and clean module separation with graceful fallbacks represent solid security-conscious engineering. Brute-force protection with exponential backoff on vault unlock closes the last major authentication gap. Complete security header coverage (HSTS, Referrer-Policy, Permissions-Policy) hardens the HTTP layer to production standards. The 227-test suite provides genuine quality assurance.
+Random per-vault PBKDF2 salt, comprehensive CSP, DoS protection with limits, schema validation with positional errors, chunked encoding, and clean module separation with graceful fallbacks represent solid security-conscious engineering. Brute-force protection with exponential backoff on vault unlock closes the last major authentication gap. Complete security header coverage (HSTS, Referrer-Policy, Permissions-Policy) hardens the HTTP layer to production standards. The 231-test suite provides genuine quality assurance.
 
 ### Why not 10.0
 
@@ -344,7 +344,7 @@ The on-device audio pipeline transforms this from a "mostly private" to a "genui
 8. **Complete security headers** — HSTS, Referrer-Policy, Permissions-Policy added to existing CSP
 9. **Full on-device audio pipeline** (AudioCapture -> VAD -> STT) with TTS voice feedback
 10. **WCAG accessibility hardening** — 172 ARIA attributes, focus traps, keyboard navigation, screen reader support
-11. **227 passing tests** providing genuine quality assurance
+11. **231 passing tests** providing genuine quality assurance
 
 ---
 

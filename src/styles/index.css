@@ -480,6 +480,39 @@ input:focus, textarea:focus, select:focus {
   flex-shrink: 0;
 }
 
+.boot-cached {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  background: rgba(39, 174, 96, 0.15);
+  color: var(--green-secure);
+  border: 1px solid rgba(39, 174, 96, 0.3);
+  flex-shrink: 0;
+}
+
+.boot-dim {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+
+.boot-model-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  font-weight: 600;
+  opacity: 0;
+  animation: bootFadeIn 0.3s ease forwards;
+  margin-top: 0.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .boot-line.error {
   color: var(--red-destroy-bright);
 }
@@ -488,8 +521,22 @@ input:focus, textarea:focus, select:focus {
   color: var(--red-destroy-bright);
 }
 
+.boot-footer {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.boot-elapsed {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
 .boot-classification {
-  margin-top: 2rem;
   font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 600;

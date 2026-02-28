@@ -120,13 +120,14 @@ function AppInner() {
   const [sdkReady, setSdkReady] = useState(false);
   const [sdkError, setSdkError] = useState<string | null>(null);
   const [bootPhase, setBootPhase] = useState(0);
-  const [modelProgress, setModelProgress] = useState(-1);
+  const [bootElapsed, setBootElapsed] = useState(0);
 
-  // Per-model ONNX boot status
-  interface OnnxBootStatus { state: OnnxModelState; progress: number; name: string; size: string; error?: string }
-  const [vadStatus, setVadStatus] = useState<OnnxBootStatus>({ state: 'pending', progress: 0, name: 'Silero VAD', size: '2.3 MB' });
-  const [sttStatus, setSttStatus] = useState<OnnxBootStatus>({ state: 'pending', progress: 0, name: 'Whisper Tiny English', size: '103 MB' });
-  const [ttsStatus, setTtsStatus] = useState<OnnxBootStatus>({ state: 'pending', progress: 0, name: 'Piper English (Amy)', size: '63 MB' });
+  // Unified per-model boot status (LLM + ONNX all use the same shape)
+  interface BootModelStatus { state: OnnxModelState; progress: number; name: string; size: string; cached: boolean; error?: string }
+  const [llmStatus, setLlmStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Qwen 2.5 0.5B Instruct', size: '~400 MB', cached: false });
+  const [vadStatus, setVadStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Silero VAD', size: '2.3 MB', cached: false });
+  const [sttStatus, setSttStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Whisper Tiny English', size: '103 MB', cached: false });
+  const [ttsStatus, setTtsStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Piper English (Amy)', size: '63 MB', cached: false });
 
   // Navigation state
   const [screen, setScreen] = useState<AppScreen>('unlock');
@@ -210,6 +211,16 @@ function AppInner() {
     try { localStorage.setItem('shadownotes-autolock', String(autoLockMs)); } catch (e) { console.warn('localStorage unavailable:', e); }
   }, [autoLockMs]);
 
+  // Boot elapsed timer — ticks every second so the user sees continuous activity
+  useEffect(() => {
+    if (sdkReady) return;
+    const id = setInterval(() => setBootElapsed(s => s + 1), 1_000);
+    return () => clearInterval(id);
+  }, [sdkReady]);
+
+  // Yield to main thread so UI repaints between heavy async ops
+  const yieldToMain = (): Promise<void> => new Promise(r => setTimeout(r, 0));
+
   // Boot sequence — phases 1-3 are instant (cosmetic), real async starts at SDK init
   useEffect(() => {
     const bootSequence = async () => {
@@ -217,37 +228,62 @@ function AppInner() {
       try {
         await initSDK();
         setBootPhase(4);
-        const models = ModelManager.getModels().filter((m) => m.modality === ModelCategory.Language);
-        if (models.length > 0) {
-          const model = models[0];
-          setBootPhase(5);
+        // Phase 5: Load all models — LLM first, then ONNX audio models
+        setBootPhase(5);
+        await yieldToMain();
+
+        // ── LLM ──────────────────────────────────────────────
+        const langModels = ModelManager.getModels().filter((m) => m.modality === ModelCategory.Language);
+        if (langModels.length > 0) {
+          const model = langModels[0];
+
+          // Check OPFS cache
+          setLlmStatus(s => ({ ...s, state: 'checking' }));
+          await yieldToMain();
           const opfs = new OPFSStorage();
           const opfsOk = await opfs.initialize();
-          const cached = opfsOk && await opfs.hasModel(model.id);
-          if (!cached) {
-            setModelProgress(0);
+          const llmCached = opfsOk && await opfs.hasModel(model.id);
+          await yieldToMain();
+
+          if (llmCached) {
+            setLlmStatus(s => ({ ...s, state: 'cached', cached: true, progress: 1 }));
+            await yieldToMain();
+          } else {
+            // Download with live progress via EventBus
+            setLlmStatus(s => ({ ...s, state: 'downloading', progress: 0 }));
+            await yieldToMain();
             const unsub = EventBus.shared.on('model.downloadProgress', (evt) => {
-              if (evt.modelId === model.id) setModelProgress(evt.progress ?? 0);
+              if (evt.modelId === model.id) {
+                setLlmStatus(s => ({ ...s, progress: evt.progress ?? 0 }));
+              }
             });
             await ModelManager.downloadModel(model.id);
             unsub();
+            await yieldToMain();
           }
-          setModelProgress(1);
-          // Load the model into the inference engine so it's ready on first use
+
+          // Load into RAM / GPU
+          setLlmStatus(s => ({ ...s, state: 'loading', progress: 1 }));
+          await yieldToMain();
           if (!ModelManager.getLoadedModel(ModelCategory.Language)) {
             await ModelManager.loadModel(model.id, { coexist: true });
+            await yieldToMain();
           }
-          // Update SDK feature readiness after LLM + embeddings are loaded
           refreshSDKFeatureStatus();
+          setLlmStatus(s => ({ ...s, state: 'done' }));
+          await yieldToMain();
         }
-        // Phase 6: Preload ONNX audio models (VAD, STT, TTS) with per-model progress
+
+        // ── ONNX audio models (VAD, STT, TTS) ───────────────
         setBootPhase(6);
+        await yieldToMain();
         await preloadONNXModels((event: OnnxPreloadEvent) => {
-          const status: OnnxBootStatus = {
+          const status: BootModelStatus = {
             state: event.state,
             progress: event.progress,
             name: event.modelName,
             size: event.modelSize,
+            cached: event.cached,
             error: event.error,
           };
           switch (event.model) {
@@ -613,6 +649,39 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handler);
   }, [screen, showSearch, showVoiceHelp, showKeyboardHelp, exportModal, handleNewSession, handleSaveSession]);
 
+  // Helper: render a single model line on the boot screen
+  const BootModelLine = ({ prefix, s }: { prefix: string; s: BootModelStatus }) => {
+    const cls = s.state === 'done' ? 'done' : s.state === 'error' ? 'error' : (s.state === 'pending' ? '' : 'active');
+    return (
+      <div className={`boot-line ${cls}`}>
+        <span className="boot-prefix">[{prefix}]</span>
+        <span>{s.name}</span>
+        <span className="boot-size">({s.size})</span>
+        {s.state === 'pending' && <span className="boot-dim">waiting...</span>}
+        {s.state === 'checking' && <><span className="boot-dim">Checking cache...</span> <span className="boot-spinner" /></>}
+        {s.state === 'cached' && <span className="boot-cached">CACHED</span>}
+        {s.state === 'downloading' && (
+          <>
+            <span className="boot-progress-bar"><span className="boot-progress-fill" style={{ width: `${Math.round(s.progress * 100)}%` }} /></span>
+            <span className="boot-pct">{Math.round(s.progress * 100)}%</span>
+          </>
+        )}
+        {s.state === 'loading' && <><span className="boot-dim">Loading into memory...</span> <span className="boot-spinner" /></>}
+        {s.state === 'done' && (
+          <>
+            {s.cached && <span className="boot-cached">CACHED</span>}
+            <span className="boot-check">{'\u2713'}</span>
+          </>
+        )}
+        {s.state === 'error' && <span className="boot-err-label">FAILED</span>}
+      </div>
+    );
+  };
+
+  // Count how many models are fully loaded
+  const modelsDone = [llmStatus, vadStatus, sttStatus, ttsStatus].filter(s => s.state === 'done').length;
+  const modelsTotal = 4;
+
   // Boot screen
   if (!sdkReady) {
     return (
@@ -651,81 +720,27 @@ function AppInner() {
             {bootPhase >= 2 && bootPhase < 3 && (
               <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '80%' }} aria-hidden="true" />
             )}
-            {bootPhase >= 5 && (
-              <div className={`boot-line ${modelProgress >= 1 ? 'done' : 'active'}`}>
-                <span className="boot-prefix">[LLM]</span>
-                {modelProgress >= 1
-                  ? <>Qwen 2.5 0.5B Instruct <span className="boot-size">(~400 MB)</span> <span className="boot-check">{'\u2713'}</span></>
-                  : <>Qwen 2.5 0.5B Instruct <span className="boot-size">(~400 MB)</span>
-                      <span className="boot-progress-bar"><span className="boot-progress-fill" style={{ width: `${Math.round(Math.max(0, modelProgress) * 100)}%` }} /></span>
-                      <span className="boot-pct">{Math.round(Math.max(0, modelProgress) * 100)}%</span>
-                    </>
-                }
-              </div>
-            )}
-            {bootPhase >= 4 && bootPhase < 5 && (
-              <div className="skeleton-shimmer skeleton-shimmer-line" style={{ width: '65%' }} aria-hidden="true" />
-            )}
-            {bootPhase >= 6 && (
-              <>
-                {/* VAD */}
-                <div className={`boot-line ${vadStatus.state === 'done' ? 'done' : vadStatus.state === 'error' ? 'error' : vadStatus.state === 'pending' ? '' : 'active'}`}>
-                  <span className="boot-prefix">[VAD]</span>
-                  {vadStatus.state === 'done'
-                    ? <>{vadStatus.name} <span className="boot-size">({vadStatus.size})</span> <span className="boot-check">{'\u2713'}</span></>
-                    : vadStatus.state === 'error'
-                      ? <>{vadStatus.name} <span className="boot-size">({vadStatus.size})</span> <span className="boot-err-label">FAILED</span></>
-                      : vadStatus.state === 'downloading'
-                        ? <>{vadStatus.name} <span className="boot-size">({vadStatus.size})</span>
-                            <span className="boot-progress-bar"><span className="boot-progress-fill" style={{ width: `${Math.round(vadStatus.progress * 100)}%` }} /></span>
-                            <span className="boot-pct">{Math.round(vadStatus.progress * 100)}%</span>
-                          </>
-                        : vadStatus.state === 'loading'
-                          ? <>{vadStatus.name} <span className="boot-size">({vadStatus.size})</span> Initializing... <span className="boot-spinner" /></>
-                          : <>{vadStatus.name} <span className="boot-size">({vadStatus.size})</span> <span className="boot-spinner" /></>
-                  }
-                </div>
-                {/* STT */}
-                <div className={`boot-line ${sttStatus.state === 'done' ? 'done' : sttStatus.state === 'error' ? 'error' : sttStatus.state === 'pending' ? '' : 'active'}`}>
-                  <span className="boot-prefix">[STT]</span>
-                  {sttStatus.state === 'done'
-                    ? <>{sttStatus.name} <span className="boot-size">({sttStatus.size})</span> <span className="boot-check">{'\u2713'}</span></>
-                    : sttStatus.state === 'error'
-                      ? <>{sttStatus.name} <span className="boot-size">({sttStatus.size})</span> <span className="boot-err-label">FAILED</span></>
-                      : sttStatus.state === 'downloading'
-                        ? <>{sttStatus.name} <span className="boot-size">({sttStatus.size})</span>
-                            <span className="boot-progress-bar"><span className="boot-progress-fill" style={{ width: `${Math.round(sttStatus.progress * 100)}%` }} /></span>
-                            <span className="boot-pct">{Math.round(sttStatus.progress * 100)}%</span>
-                          </>
-                        : sttStatus.state === 'loading'
-                          ? <>{sttStatus.name} <span className="boot-size">({sttStatus.size})</span> Initializing... <span className="boot-spinner" /></>
-                          : <>{sttStatus.name} <span className="boot-size">({sttStatus.size})</span> <span className="boot-spinner" /></>
-                  }
-                </div>
-                {/* TTS */}
-                <div className={`boot-line ${ttsStatus.state === 'done' ? 'done' : ttsStatus.state === 'error' ? 'error' : ttsStatus.state === 'pending' ? '' : 'active'}`}>
-                  <span className="boot-prefix">[TTS]</span>
-                  {ttsStatus.state === 'done'
-                    ? <>{ttsStatus.name} <span className="boot-size">({ttsStatus.size})</span> <span className="boot-check">{'\u2713'}</span></>
-                    : ttsStatus.state === 'error'
-                      ? <>{ttsStatus.name} <span className="boot-size">({ttsStatus.size})</span> <span className="boot-err-label">FAILED</span></>
-                      : ttsStatus.state === 'downloading'
-                        ? <>{ttsStatus.name} <span className="boot-size">({ttsStatus.size})</span>
-                            <span className="boot-progress-bar"><span className="boot-progress-fill" style={{ width: `${Math.round(ttsStatus.progress * 100)}%` }} /></span>
-                            <span className="boot-pct">{Math.round(ttsStatus.progress * 100)}%</span>
-                          </>
-                        : ttsStatus.state === 'loading'
-                          ? <>{ttsStatus.name} <span className="boot-size">({ttsStatus.size})</span> Initializing... <span className="boot-spinner" /></>
-                          : <>{ttsStatus.name} <span className="boot-size">({ttsStatus.size})</span> <span className="boot-spinner" /></>
-                  }
-                </div>
-              </>
-            )}
             {bootPhase >= 4 && (
               <div className="boot-line done" style={{ opacity: 0.6 }}>
                 <span className="boot-prefix">[HW]</span> Device detected
                 <span className="boot-check">{'\u2713'}</span>
               </div>
+            )}
+            {bootPhase >= 5 && (
+              <>
+                <div className="boot-model-header">
+                  <span className="boot-prefix">[DL]</span>
+                  <span>Loading AI models ({modelsDone}/{modelsTotal})</span>
+                </div>
+                <BootModelLine prefix="LLM" s={llmStatus} />
+              </>
+            )}
+            {bootPhase >= 6 && (
+              <>
+                <BootModelLine prefix="VAD" s={vadStatus} />
+                <BootModelLine prefix="STT" s={sttStatus} />
+                <BootModelLine prefix="TTS" s={ttsStatus} />
+              </>
             )}
             {sdkError && (
               <div className="boot-line error">
@@ -733,7 +748,10 @@ function AppInner() {
               </div>
             )}
           </div>
-          <div className="boot-classification">CLASSIFIED // EYES ONLY</div>
+          <div className="boot-footer">
+            <div className="boot-elapsed">{bootElapsed}s elapsed</div>
+            <div className="boot-classification">CLASSIFIED // EYES ONLY</div>
+          </div>
         </div>
       </div>
     );

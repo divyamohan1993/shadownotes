@@ -243,8 +243,11 @@ function isModuleReady(category: ModelCategory): boolean {
   return false;
 }
 
+/** Yield to the browser event loop so UI can repaint between heavy ops. */
+const yieldToMain = (): Promise<void> => new Promise(r => setTimeout(r, 0));
+
 /** State reported per-model during preload. */
-export type OnnxModelState = 'pending' | 'checking' | 'downloading' | 'loading' | 'done' | 'error';
+export type OnnxModelState = 'pending' | 'checking' | 'cached' | 'downloading' | 'loading' | 'done' | 'error';
 
 /** Progress event emitted for each ONNX model during preload. */
 export interface OnnxPreloadEvent {
@@ -253,6 +256,7 @@ export interface OnnxPreloadEvent {
   modelSize: string;
   state: OnnxModelState;
   progress: number; // 0-1 for download
+  cached: boolean;  // true if loaded from OPFS cache (not re-downloaded)
   error?: string;
 }
 
@@ -265,8 +269,12 @@ const ONNX_MODEL_META: Record<string, { label: 'VAD' | 'STT' | 'TTS'; name: stri
 
 /**
  * Download and load a single ONNX model with granular progress reporting.
+ *
  * Uses explicit download + load (mirroring LLM boot pattern) instead of
  * ensureLoaded, so we can subscribe to EventBus download progress events.
+ *
+ * Yields to the main thread between heavy operations so the boot screen
+ * can repaint continuously (spinner keeps spinning, progress bars update).
  */
 async function downloadAndLoadOnnxModel(
   category: ModelCategory,
@@ -280,20 +288,30 @@ async function downloadAndLoadOnnxModel(
 
   const model = models[0];
   const meta = ONNX_MODEL_META[model.id] ?? { label: 'ONNX' as const, name: model.name, size: '?', category };
+  let fromCache = false;
   const emit = (state: OnnxModelState, progress: number, error?: string) => {
-    onProgress?.({ model: meta.label, modelName: meta.name, modelSize: meta.size, state, progress, error });
+    onProgress?.({ model: meta.label, modelName: meta.name, modelSize: meta.size, state, progress, cached: fromCache, error });
   };
 
+  // ── 1. Check OPFS cache ──────────────────────────────────
   emit('checking', 0);
+  await yieldToMain();
 
-  // Check OPFS cache directly — model.status may lag behind actual cache state
   const opfs = new OPFSStorage();
   const opfsOk = await opfs.initialize();
-  const cached = opfsOk && await opfs.hasModel(model.id);
+  const inCache = opfsOk && await opfs.hasModel(model.id);
+  await yieldToMain();
 
-  if (!cached && model.status !== 'downloaded' && model.status !== 'loaded') {
+  // ── 2. Download or confirm cache ─────────────────────────
+  if (inCache || model.status === 'downloaded' || model.status === 'loaded') {
+    fromCache = true;
+    emit('cached', 1);
+    log.info(`${meta.label} found in OPFS cache`);
+    await yieldToMain();
+  } else {
     // Download with progress tracking via EventBus
     emit('downloading', 0);
+    await yieldToMain();
     const unsub = EventBus.shared.on('model.downloadProgress', (evt: { modelId?: string; progress?: number }) => {
       if (evt.modelId === model.id) {
         emit('downloading', evt.progress ?? 0);
@@ -304,12 +322,16 @@ async function downloadAndLoadOnnxModel(
     } finally {
       unsub();
     }
+    await yieldToMain();
   }
 
-  // Load into inference engine
+  // ── 3. Load into RAM / inference engine ──────────────────
   emit('loading', 1);
+  await yieldToMain();
+
   if (!ModelManager.getLoadedModel(category)) {
     await ModelManager.loadModel(model.id, { coexist: true });
+    await yieldToMain();
   }
 
   // Verify the high-level module actually reports as ready.
@@ -318,13 +340,14 @@ async function downloadAndLoadOnnxModel(
   if (!isModuleReady(category)) {
     log.warning(`${meta.label} module not ready after loadModel — retrying`);
     await ModelManager.loadModel(model.id, { coexist: true });
+    await yieldToMain();
   }
 
   refreshSDKFeatureStatus();
 
   if (isModuleReady(category)) {
     emit('done', 1);
-    log.info(`${meta.label} (${meta.name}) loaded successfully`);
+    log.info(`${meta.label} (${meta.name}) loaded successfully${fromCache ? ' [from cache]' : ''}`);
   } else {
     emit('error', 1, `${meta.label} module not ready after load`);
     log.warning(`${meta.label} module not ready after all attempts`);
@@ -345,7 +368,7 @@ export async function preloadONNXModels(
     await downloadAndLoadOnnxModel(ModelCategory.Audio, onProgress);
   } catch (err) {
     log.warning(`VAD preload failed: ${err}`);
-    onProgress?.({ model: 'VAD', modelName: 'Silero VAD', modelSize: '2.3 MB', state: 'error', progress: 0, error: String(err) });
+    onProgress?.({ model: 'VAD', modelName: 'Silero VAD', modelSize: '2.3 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // STT: Whisper Tiny English (~103 MB on first run, cached after)
@@ -353,7 +376,7 @@ export async function preloadONNXModels(
     await downloadAndLoadOnnxModel(ModelCategory.SpeechRecognition, onProgress);
   } catch (err) {
     log.warning(`STT preload failed: ${err}`);
-    onProgress?.({ model: 'STT', modelName: 'Whisper Tiny English', modelSize: '103 MB', state: 'error', progress: 0, error: String(err) });
+    onProgress?.({ model: 'STT', modelName: 'Whisper Tiny English', modelSize: '103 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // TTS: Piper English voice (~63 MB on first run, cached after)
@@ -361,7 +384,7 @@ export async function preloadONNXModels(
     await downloadAndLoadOnnxModel(ModelCategory.SpeechSynthesis, onProgress);
   } catch (err) {
     log.warning(`TTS preload failed: ${err}`);
-    onProgress?.({ model: 'TTS', modelName: 'Piper English (Amy)', modelSize: '63 MB', state: 'error', progress: 0, error: String(err) });
+    onProgress?.({ model: 'TTS', modelName: 'Piper English (Amy)', modelSize: '63 MB', state: 'error', progress: 0, cached: false, error: String(err) });
   }
 
   // Final refresh to capture all states

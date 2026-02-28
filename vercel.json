@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/api/proxy/tts/:path*",
+      "destination": "https://github.com/RunanywhereAI/sherpa-onnx/releases/download/runanywhere-models-v1/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

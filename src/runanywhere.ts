@@ -109,7 +109,7 @@ const MODELS: CompactModelDef[] = [
   {
     id: 'vits-piper-en_US-lessac-medium',
     name: 'Piper English (Lessac)',
-    url: 'https://github.com/RunanywhereAI/sherpa-onnx/releases/download/runanywhere-models-v1/vits-piper-en_US-lessac-medium.tar.gz',
+    url: '/api/proxy/tts/vits-piper-en_US-lessac-medium.tar.gz',
     framework: LLMFramework.PiperTTS,
     modality: ModelCategory.SpeechSynthesis,
     memoryRequirement: 100_000_000,

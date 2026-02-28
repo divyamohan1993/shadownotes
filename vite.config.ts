@@ -85,11 +85,11 @@ export default defineConfig({
               runtimeCaching: [
                 {
                   urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-                  handler: 'CacheFirst',
+                  handler: 'StaleWhileRevalidate',
                   options: {
                     cacheName: 'google-fonts-css',
                     expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-                    cacheableResponse: { statuses: [0, 200] },
+                    cacheableResponse: { statuses: [200] },
                   },
                 },
                 {
@@ -98,7 +98,7 @@ export default defineConfig({
                   options: {
                     cacheName: 'google-fonts-webfonts',
                     expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-                    cacheableResponse: { statuses: [0, 200] },
+                    cacheableResponse: { statuses: [200] },
                   },
                 },
               ],

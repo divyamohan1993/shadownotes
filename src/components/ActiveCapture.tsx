@@ -326,7 +326,7 @@ Example:
     }
 
     // Cap transcript length to avoid overflowing the small model's context window.
-    // Qwen2.5 0.5B has a limited context; prioritise recent speech.
+    // Gemma 3 1B has a limited context; prioritise recent speech.
     const MAX_TRANSCRIPT_CHARS = 2000;
     const trimmedText = text.length > MAX_TRANSCRIPT_CHARS
       ? text.slice(-MAX_TRANSCRIPT_CHARS)

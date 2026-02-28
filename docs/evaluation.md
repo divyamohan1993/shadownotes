@@ -70,7 +70,7 @@ Every SDK feature above was verified in source with real API calls, real paramet
 
 ### Why not 10.0
 
-- Model is still 0.5B Qwen2.5 — adequate but not optimal for complex extraction
+- Model is still 1B Gemma 3 — adequate but not optimal for complex extraction
 - No fine-tuning or LoRA adaptation for the specific domain extraction task
 - ONNX audio models may not actually download/load successfully on all devices (the code is correct, but runtime availability depends on model hosting and device capabilities)
 
@@ -125,7 +125,7 @@ The three-layer cascade with semantic deduplication is a genuinely creative arch
 ### Why not 10.0
 
 - Speech error correction is still prompt-based rather than using a custom decoder or post-processing model
-- The 0.5B model limits the quality ceiling for the ToolCalling extraction — larger models would make the structured extraction and RAG retrieval more reliable
+- The 1B model limits the quality ceiling for the ToolCalling extraction — larger models would make the structured extraction and RAG retrieval more reliable
 - No custom model training or fine-tuning for the specific domain
 
 ---
@@ -305,7 +305,7 @@ The previous round added the full on-device audio pipeline, TTS feedback, and em
 - Applied at every extraction layer — prevents redundant entries from cluttering the intelligence feed
 
 **Zero-Cost Operation**:
-- After initial model downloads (~400MB total), all operations are free
+- After initial model downloads (~810MB total), all operations are free
 - No API keys, no subscriptions, no per-token costs
 - PWA with service worker provides full offline capability after first load
 
@@ -325,8 +325,8 @@ The on-device audio pipeline transforms this from a "mostly private" to a "genui
 
 ### Why not 10.0
 
-- 400MB initial model download remains a significant barrier for first-time users
-- 0.5B model accuracy is adequate but not competitive with cloud LLMs — users in high-stakes domains (medical, legal) may not trust the extraction quality
+- 810MB initial model download remains a significant barrier for first-time users
+- 1B model accuracy is adequate but not competitive with cloud LLMs — users in high-stakes domains (medical, legal) may not trust the extraction quality
 - No real-world user testing data or testimonials
 
 ---
@@ -360,7 +360,7 @@ The on-device audio pipeline transforms this from a "mostly private" to a "genui
 
 ## Remaining Gaps for 10.0
 
-1. **Model quality** — upgrade from 0.5B to 1.5B or 3B for more reliable extraction, especially for ToolCalling and RAG retrieval
+1. **Model quality** — upgrade from 1B to 4B for more reliable extraction, especially for ToolCalling and RAG retrieval
 2. **Real-world validation** — user testing with actual security auditors, physicians, or attorneys
 3. **CI/CD hardening** — automated security scanning (SAST), dependency auditing, bundle size budgets in pipeline
 4. **Mobile optimization** — responsive design exists but one-handed mobile use is not optimized

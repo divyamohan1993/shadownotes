@@ -55,15 +55,15 @@ import {
 
 // ── Model Registry ──────────────────────────────────────────
 const MODELS: CompactModelDef[] = [
-  // LLM — primary intelligence extraction engine
+  // LLM — primary intelligence extraction engine (Gemma 3 1B Instruct)
   {
-    id: 'qwen2.5-0.5b-instruct-q4_k_m',
-    name: 'Qwen2.5 0.5B Instruct Q4_K_M',
-    repo: 'bartowski/Qwen2.5-0.5B-Instruct-GGUF',
-    files: ['Qwen2.5-0.5B-Instruct-Q4_K_M.gguf'],
+    id: 'gemma-3-1b-it-q4_k_m',
+    name: 'Gemma 3 1B Instruct Q4_K_M',
+    repo: 'bartowski/google_gemma-3-1b-it-GGUF',
+    files: ['google_gemma-3-1b-it-Q4_K_M.gguf'],
     framework: LLMFramework.LlamaCpp,
     modality: ModelCategory.Language,
-    memoryRequirement: 400_000_000,
+    memoryRequirement: 900_000_000,
   },
   // VAD — Silero Voice Activity Detection (~2.3 MB)
   {

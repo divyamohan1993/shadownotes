@@ -35,14 +35,14 @@ ShadowNotes deeply integrates all three RunAnywhere SDK packages — **20+ load-
 
 | SDK Feature | Package | How It's Used |
 |-------------|---------|---------------|
-| **`TextGeneration.generateStream()`** | `web-llamacpp` | Core extraction engine. Qwen2.5 0.5B Instruct streams tokens one-by-one with real-time cursor animation. Domain-specific system prompts guide extraction and correct speech errors. |
+| **`TextGeneration.generateStream()`** | `web-llamacpp` | Core extraction engine. Gemma 3 1B Instruct streams tokens one-by-one with real-time cursor animation. Domain-specific system prompts guide extraction and correct speech errors. |
 | **`StructuredOutput.extractJson()`** | `web-llamacpp` | JSON schema-guided validation fallback for reliable parsing when LLM returns structured data. |
 | **`ToolCalling.generateWithTools()`** | `web-llamacpp` | Structured tool-call extraction with `extract_finding` and `flag_anomaly` tools. Uses `toToolValue`/`fromToolValue` for proper serialization. |
 | **`Embeddings` + `findSimilar()`** | `web-llamacpp` | Semantic deduplication, RAG context retrieval (`buildRAGContext`), and GlobalSearch reranking via cosine similarity. |
 | **`VoicePipeline` + `VoiceAgent`** | `web` | Hands-free agent mode: continuous listen → process → respond loop for field operatives. |
 | **`SDKLogger`** | `web` | Structured logging throughout SDK integration (replaces raw `console.*`). |
 | **`detectCapabilities()`** | `web` | Hardware detection (WebGPU, RAM, cores) for capability-aware performance presets. |
-| **`ModelManager` + `EventBus`** | `web` | Model lifecycle management with OPFS caching (~400MB) and real-time download progress events. |
+| **`ModelManager` + `EventBus`** | `web` | Model lifecycle management with OPFS caching (~810MB) and real-time download progress events. |
 | **`RunAnywhere.initialize()`** | `web` | GPU detection with crash recovery. Probes WebGPU + shader-f16, falls back to CPU if WebGPU crashes. |
 | **`OPFSStorage`** | `web` | Origin Private File System cache for instant startup on return visits. |
 | **`STT` + `VAD` + `AudioCapture`** | `web-onnx` | On-device speech-to-text with voice activity detection and audio capture pipeline. |
@@ -110,7 +110,7 @@ for await (const token of stream.stream) {
 | Framework | React 19 + TypeScript (strict mode) |
 | Build Tool | Vite 7 |
 | AI SDK | RunAnywhere Web SDK — `web`, `web-llamacpp`, `web-onnx` (3 packages, 20+ features) |
-| LLM | Qwen2.5 0.5B Instruct Q4_K_M via llama.cpp WASM |
+| LLM | Gemma 3 1B Instruct Q4_K_M via llama.cpp WASM |
 | STT | Web Speech API (browser) + ONNX STT (on-device) |
 | Audio AI | VAD, TTS, AudioCapture, AudioPlayback via `@runanywhere/web-onnx` |
 | Encryption | AES-256-GCM + HKDF + PBKDF2 (600K iterations) |

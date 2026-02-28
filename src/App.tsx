@@ -124,7 +124,7 @@ function AppInner() {
 
   // Unified per-model boot status (LLM + ONNX all use the same shape)
   interface BootModelStatus { state: OnnxModelState; progress: number; name: string; size: string; cached: boolean; error?: string }
-  const [llmStatus, setLlmStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Qwen 2.5 0.5B Instruct', size: '~400 MB', cached: false });
+  const [llmStatus, setLlmStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Gemma 3 1B Instruct', size: '~810 MB', cached: false });
   const [vadStatus, setVadStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Silero VAD', size: '2.3 MB', cached: false });
   const [sttStatus, setSttStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Whisper Tiny English', size: '103 MB', cached: false });
   const [ttsStatus, setTtsStatus] = useState<BootModelStatus>({ state: 'pending', progress: 0, name: 'Piper English (Amy)', size: '63 MB', cached: false });

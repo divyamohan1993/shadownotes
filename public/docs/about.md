@@ -22,7 +22,7 @@ Cloud-based AI means your most sensitive data crosses the wire. ShadowNotes elim
 Everything happens on-device, inside the browser sandbox:
 
 1. **Speech capture** — Browser-native Web Speech API transcribes your voice in real time
-2. **Streaming AI extraction** — An on-device LLM (Qwen2.5 0.5B, running in WebAssembly) streams token-by-token structured intelligence extraction via `TextGeneration.generateStream()`, with `StructuredOutput.extractJson()` for JSON validation fallback
+2. **Streaming AI extraction** — An on-device LLM (Gemma 3 1B, running in WebAssembly) streams token-by-token structured intelligence extraction via `TextGeneration.generateStream()`, with `StructuredOutput.extractJson()` for JSON validation fallback
 3. **Keyword fallback** — A regex-based extraction engine provides instant results while the LLM loads or as a backup
 4. **Encrypted vault** — All session data encrypted with AES-256-GCM using per-case HKDF-derived keys, authenticated via WebAuthn biometrics (Windows Hello / Touch ID)
 5. **Ephemeral mode** — Hit DESTROY for cinematic burn animation that wipes all data irrecoverably
@@ -64,7 +64,7 @@ Encrypted vault (AES-256-GCM) or DESTROY → zero memory
 ### Step by Step
 
 1. **Boot** — App initializes the RunAnywhere SDK and checks GPU capabilities (WebGPU with shader-f16 for acceleration, CPU fallback otherwise)
-2. **Select Domain** — Choose from 4 specialized domains. The LLM model begins downloading in the background (~400MB, cached after first download in OPFS)
+2. **Select Domain** — Choose from 4 specialized domains. The LLM model begins downloading in the background (~810MB, cached after first download in OPFS)
 3. **Capture** — Hit BEGIN CAPTURE. The Web Speech API streams your voice to text. Interim results show as live preview; final segments are committed to the transcript
 4. **Extract** — Hit PAUSE CAPTURE. The accumulated transcript is sent to the on-device LLM with a domain-specific prompt. The LLM outputs structured `[Category] fact` lines. If the LLM times out (30s limit) or isn't ready, keyword extraction takes over instantly
 5. **Review** — Intelligence items appear grouped by category. Click any item to edit. Click X to delete. Resume capture to add more
@@ -76,7 +76,7 @@ Encrypted vault (AES-256-GCM) or DESTROY → zero memory
 ShadowNotes uses a dual-layer extraction pipeline with deep RunAnywhere SDK integration:
 
 **Layer 1: Streaming On-Device LLM (Primary)**
-- Model: Qwen2.5 0.5B Instruct (Q4_K_M quantization, ~400MB)
+- Model: Gemma 3 1B Instruct (Q4_K_M quantization, ~810MB)
 - Runs via llama.cpp compiled to WebAssembly
 - **Streaming output** via `TextGeneration.generateStream()` — tokens appear in real-time with cursor blink animation
 - **Structured Output** via `StructuredOutput.extractJson()` — JSON schema-guided validation fallback for reliable parsing
@@ -116,12 +116,12 @@ Each domain has:
 |------------|---------|
 | **RunAnywhere Web SDK** (`@runanywhere/web`) | Core framework: RunAnywhere.initialize(), ModelManager, EventBus, OPFSStorage |
 | **RunAnywhere LlamaCPP** (`@runanywhere/web-llamacpp`) | Streaming LLM via TextGeneration.generateStream(), StructuredOutput, advanced sampling |
-| **Qwen2.5 0.5B Instruct** (Q4_K_M) | On-device language model for structured extraction |
+| **Gemma 3 1B Instruct** (Q4_K_M) | On-device language model for structured extraction |
 | **Web Speech API** | Browser-native continuous speech recognition |
 | **WebAuthn + PRF** | Biometric authentication with key material derivation |
 | **AES-256-GCM + HKDF** | Per-case encryption for vault storage |
 | **WebGPU / shader-f16** | GPU acceleration for WASM inference (CPU fallback) |
-| **OPFS** (Origin Private File System) | Browser-local model caching (~400MB, persists across sessions) |
+| **OPFS** (Origin Private File System) | Browser-local model caching (~810MB, persists across sessions) |
 | **SharedArrayBuffer** | Multi-threaded WASM execution (requires COOP/COEP headers) |
 | **React 19** | UI framework with hooks-based state management |
 | **TypeScript** (strict) | Type-safe codebase with ESLint |
@@ -133,8 +133,8 @@ Each domain has:
 
 - Chrome 96+ or Edge 96+ (for Web Speech API + SharedArrayBuffer)
 - Microphone access
-- ~400MB storage for model cache (OPFS)
-- ~400MB RAM for inference
+- ~810MB storage for model cache (OPFS)
+- ~810MB RAM for inference
 
 ---
 

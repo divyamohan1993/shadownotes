@@ -11,7 +11,7 @@ ShadowNotes is an offline-first, encrypted field intelligence app. Voice → on-
 | What | Details |
 |------|---------|
 | Stack | React 19 + TypeScript 5.9 + Vite 7 |
-| AI | RunAnywhere SDK — Qwen2.5 LLM, Whisper STT, Piper TTS, Silero VAD (all on-device WASM) |
+| AI | RunAnywhere SDK — Gemma 3 LLM, Whisper STT, Piper TTS, Silero VAD (all on-device WASM) |
 | Security | AES-256-GCM per-case, WebAuthn PRF vault unlock |
 | Storage | IndexedDB (50 MB quota) + OPFS (model cache) |
 | Deploy | Vercel (web), Electron 35 (desktop) |

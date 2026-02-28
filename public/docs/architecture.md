@@ -92,7 +92,7 @@ SpeechRecognition (browser-native, continuous mode)
     v
 Intelligence Extraction (branching):
     |
-    +--- LLM Ready? --YES--> TextGeneration.generateStream()  <-- Qwen2.5 0.5B (llama.cpp WASM, ~455MB)
+    +--- LLM Ready? --YES--> TextGeneration.generateStream()  <-- Gemma 3 1B (llama.cpp WASM, ~900MB)
     |                              |                            topK:40, topP:0.9, stopSequences
     |                              | Stream tokens -> live UI
     |                              | StructuredOutput.extractJson() for JSON validation
@@ -114,7 +114,7 @@ IntelligenceItem[] -> React State      IntelligenceItem[] -> React State
 
 ### Extraction Layers
 
-1. **RunAnywhere LLM (primary)**: Qwen2.5 0.5B Instruct model processes transcript text with domain-specific system prompts via `TextGeneration.generateStream()`. Tokens stream to the UI in real-time. Outputs structured `[Category] finding` lines parsed by regex. `StructuredOutput.extractJson()` validates JSON-formatted responses as a secondary parsing path. Advanced sampling: `topK: 40`, `topP: 0.9`, `stopSequences`. Runs entirely on-device via llama.cpp WASM.
+1. **RunAnywhere LLM (primary)**: Gemma 3 1B Instruct model processes transcript text with domain-specific system prompts via `TextGeneration.generateStream()`. Tokens stream to the UI in real-time. Outputs structured `[Category] finding` lines parsed by regex. `StructuredOutput.extractJson()` validates JSON-formatted responses as a secondary parsing path. Advanced sampling: `topK: 40`, `topP: 0.9`, `stopSequences`. Runs entirely on-device via llama.cpp WASM.
 
 2. **Keyword Extraction (fallback)**: Regex-based pattern matching engine in `src/extraction.ts`. Zero memory overhead, instant results. Domain-specific rules for medical, security, legal, and incident domains. Used when LLM is loading or unavailable.
 
@@ -124,9 +124,9 @@ Defined in `src/runanywhere.ts`:
 
 | Model | ID | Framework | Category | Size | Source |
 |-------|----|-----------|----------|------|--------|
-| Qwen2.5 0.5B Instruct Q4_K_M | `qwen2.5-0.5b-instruct-q4_k_m` | LlamaCPP | Language | ~400MB | `bartowski/Qwen2.5-0.5B-Instruct-GGUF` (HuggingFace) |
+| Gemma 3 1B Instruct Q4_K_M | `gemma-3-1b-it-q4_k_m` | LlamaCPP | Language | ~810MB | `bartowski/google_gemma-3-1b-it-GGUF` (HuggingFace) |
 
-Total download: ~400MB (one-time, cached in OPFS)
+Total download: ~810MB (one-time, cached in OPFS)
 
 ## Domain Profiles
 
@@ -167,9 +167,9 @@ ShadowNotes deeply integrates the RunAnywhere Web SDK across all three packages 
 | SDK Feature | API Used | How It's Used |
 |-------------|----------|---------------|
 | **SDK Init** | `RunAnywhere.initialize()` | Probes WebGPU + shader-f16 with crash recovery. Falls back to CPU if WebGPU fails. |
-| **Model Manager** | `ModelManager.register()` | Registers the Qwen2.5 model with LlamaCPP framework. Manages download, OPFS cache, and load. |
+| **Model Manager** | `ModelManager.register()` | Registers the Gemma 3 model with LlamaCPP framework. Manages download, OPFS cache, and load. |
 | **EventBus** | Event subscriptions | Real-time download progress events drive the progress bar UI without polling. |
-| **OPFSStorage** | OPFS cache management | Model cache in browser's Origin Private File System (~400MB). Instant startup on return visits. |
+| **OPFSStorage** | OPFS cache management | Model cache in browser's Origin Private File System (~810MB). Instant startup on return visits. |
 | **SDKLogger** | Logging | SDK-level logging for debugging and diagnostics. |
 | **VoicePipeline + VoiceAgent** | Pipeline orchestration | Voice pipeline coordination for STT → LLM → TTS flow. |
 | **detectCapabilities()** | Device detection | Detects WebGPU, WASM SIMD, device memory, hardware concurrency at startup. |

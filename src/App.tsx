@@ -829,6 +829,7 @@ function AppInner() {
           domain={currentDomain}
           vaultSession={review.session}
           content={review.content}
+          caseItem={currentCase ?? undefined}
           onUpdateIntelligence={handleUpdateSavedIntelligence}
           onDeleteIntelligence={handleDeleteSavedIntelligence}
           onDeleteSession={async () => {
